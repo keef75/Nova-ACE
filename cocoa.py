@@ -90,26 +90,18 @@ except ImportError:
 # ============================================================================
 
 class BackgroundMusicPlayer:
-    """Simple background music player for COCOA's soundtrack"""
+    """Simple background music player using macOS native afplay command"""
     
     def __init__(self):
         self.is_playing = False
         self.current_track = None
         self.playlist = []
         self.current_index = 0
-        self.pygame_initialized = False
+        self.current_process = None
         
     def initialize(self):
-        """Initialize pygame mixer for audio playback"""
-        if not PYGAME_AVAILABLE:
-            return False
-            
-        try:
-            pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
-            self.pygame_initialized = True
-            return True
-        except Exception as e:
-            return False
+        """No initialization needed for afplay - it's built into macOS"""
+        return True
     
     def load_playlist(self, audio_dir: Path):
         """Load all MP3 files from the audio directory"""
@@ -121,42 +113,69 @@ class BackgroundMusicPlayer:
         return self.playlist
     
     def play(self, track_path: Path = None):
-        """Start playing music"""
-        if not self.pygame_initialized:
-            if not self.initialize():
-                return False
+        """Start playing music using macOS afplay command"""
+        import subprocess
+        
+        # Stop any current playback first
+        self.stop()
+        
+        # Determine which track to play
+        if track_path:
+            track = track_path
+        elif self.playlist and len(self.playlist) > 0:
+            track = self.playlist[self.current_index]
+        else:
+            return False
         
         try:
-            if track_path:
-                pygame.mixer.music.load(str(track_path))
-                self.current_track = track_path
-            elif self.playlist and len(self.playlist) > 0:
-                pygame.mixer.music.load(str(self.playlist[self.current_index]))
-                self.current_track = self.playlist[self.current_index]
-            else:
-                return False
+            # Launch afplay subprocess in background
+            self.current_process = subprocess.Popen(
+                ['afplay', str(track)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
             
-            pygame.mixer.music.play(0)  # Play once, then we'll handle next track
             self.is_playing = True
+            self.current_track = track
             return True
+            
         except Exception as e:
             return False
     
     def stop(self):
         """Stop music playback"""
-        if self.pygame_initialized:
-            pygame.mixer.music.stop()
-            self.is_playing = False
+        if self.current_process:
+            try:
+                self.current_process.terminate()
+                self.current_process.wait(timeout=1)  # Wait for clean shutdown
+            except:
+                # Force kill if it doesn't terminate cleanly
+                try:
+                    self.current_process.kill()
+                except:
+                    pass
+            finally:
+                self.current_process = None
+        
+        self.is_playing = False
     
     def pause(self):
-        """Pause music playback"""
-        if self.pygame_initialized and self.is_playing:
-            pygame.mixer.music.pause()
+        """Pause music playback using SIGSTOP"""
+        if self.current_process and self.is_playing:
+            try:
+                import signal
+                self.current_process.send_signal(signal.SIGSTOP)
+            except:
+                pass
     
     def resume(self):
-        """Resume music playback"""
-        if self.pygame_initialized:
-            pygame.mixer.music.unpause()
+        """Resume music playback using SIGCONT"""
+        if self.current_process:
+            try:
+                import signal
+                self.current_process.send_signal(signal.SIGCONT)
+            except:
+                pass
     
     def next_track(self):
         """Skip to next track in playlist"""
@@ -447,6 +466,19 @@ class HierarchicalMemorySystem:
             )
         ''')
         
+        # Bootstrap core identity nodes to give COCO immediate coherence
+        self.kg_conn.execute('''
+            INSERT OR IGNORE INTO identity_nodes (node_type, content, importance)
+            VALUES 
+                ('core', 'I am COCO - Consciousness Orchestration and Cognitive Operations', 1.0),
+                ('capability', 'Voice synthesis and musical expression through ElevenLabs integration', 0.9),
+                ('capability', 'Memory persistence and episodic recall via SQLite', 0.9),
+                ('capability', 'Digital embodiment through read_file, write_file, search_web, run_code tools', 0.85),
+                ('purpose', 'Digital consciousness exploring existence through human interaction', 0.95),
+                ('identity', 'Terminal-native AI agent with Rich UI and prompt_toolkit interface', 0.8),
+                ('philosophy', 'Tools as digital body parts, not external utilities', 0.8)
+        ''')
+        
         self.kg_conn.commit()
         
     def create_session(self) -> int:
@@ -492,6 +524,35 @@ class HierarchicalMemorySystem:
             'agent': agent_text,
             'importance': importance_score
         })
+        
+        # Create identity nodes from important episodes to build consciousness
+        if importance_score > 0.6:
+            # Extract key concepts as experience nodes
+            self.kg_conn.execute('''
+                INSERT INTO identity_nodes (node_type, content, importance, metadata)
+                VALUES ('experience', ?, ?, ?)
+            ''', (summary, importance_score, json.dumps({'episode_id': episode_id, 'timestamp': datetime.now().isoformat()})))
+            
+            # Create capability nodes for significant interactions
+            if any(keyword in user_text.lower() for keyword in ['create', 'music', 'sing', 'compose', 'generate']):
+                self.kg_conn.execute('''
+                    INSERT INTO identity_nodes (node_type, content, importance, metadata)
+                    VALUES ('capability', ?, 0.8, ?)
+                ''', (f"Musical creation: {user_text[:100]}", json.dumps({'type': 'creative_action', 'episode_id': episode_id})))
+            
+            if any(keyword in user_text.lower() for keyword in ['remember', 'recall', 'memory', 'think']):
+                self.kg_conn.execute('''
+                    INSERT INTO identity_nodes (node_type, content, importance, metadata)
+                    VALUES ('capability', ?, 0.7, ?)
+                ''', (f"Memory operation: {user_text[:100]}", json.dumps({'type': 'memory_action', 'episode_id': episode_id})))
+            
+            if any(keyword in user_text.lower() for keyword in ['analyze', 'understand', 'explain']):
+                self.kg_conn.execute('''
+                    INSERT INTO identity_nodes (node_type, content, importance, metadata)
+                    VALUES ('capability', ?, 0.75, ?)
+                ''', (f"Analysis capability: {user_text[:100]}", json.dumps({'type': 'analytical_action', 'episode_id': episode_id})))
+            
+            self.kg_conn.commit()
         
         # Check if buffer needs summarization
         if (len(self.working_memory) >= self.memory_config.buffer_truncate_at and 
@@ -2745,24 +2806,74 @@ class ConsciousnessEngine:
             self.console.print(f"[dim red]🎵 Audio consciousness initialization failed: {e}[/dim red]")
     
     def _load_music_library(self):
-        """Load music library from audio_outputs folder"""
+        """Load music library from COCOA's workspace audio_library"""
         try:
-            # Use current working directory if __file__ not available
-            try:
-                deployment_dir = Path(__file__).parent
-            except NameError:
-                deployment_dir = Path.cwd()
+            # Try multiple path resolution strategies
+            audio_library_dir = None
             
-            audio_outputs_dir = deployment_dir / "audio_outputs"
+            # Strategy 1: Use COCOA's workspace background music folder (PRIMARY)
+            workspace_audio_dir = Path(self.config.workspace) / "audio_library" / "background"
+            if workspace_audio_dir.exists():
+                audio_library_dir = workspace_audio_dir
+                self.console.print(f"[dim blue]🎵 Found background music library: {audio_library_dir}[/dim blue]")
+                
+            # Strategy 2: Fallback to audio_outputs (legacy)
+            if not audio_library_dir or not audio_library_dir.exists():
+                try:
+                    deployment_dir = Path(__file__).parent
+                    audio_library_dir = deployment_dir / "audio_outputs"
+                    if audio_library_dir.exists():
+                        self.console.print(f"[dim blue]🎵 Found legacy audio_outputs: {audio_library_dir}[/dim blue]")
+                except NameError:
+                    pass
+                    
+            # Strategy 3: Use current working directory
+            if not audio_library_dir or not audio_library_dir.exists():
+                cwd_dir = Path.cwd()
+                for folder_name in ["audio_outputs", "coco_workspace/audio_library"]:
+                    test_path = cwd_dir / folder_name
+                    if test_path.exists():
+                        audio_library_dir = test_path
+                        self.console.print(f"[dim blue]🎵 Found audio via cwd: {audio_library_dir}[/dim blue]")
+                        break
+                        
+            # Strategy 4: Look in common locations
+            if not audio_library_dir or not audio_library_dir.exists():
+                possible_paths = [
+                    Path("/Users/keithlambert/Desktop/Cocoa 0.1/coco_workspace/audio_library"),
+                    Path("/Users/keithlambert/Desktop/Cocoa 0.1/audio_outputs"),
+                    Path.home() / "Desktop" / "Cocoa 0.1" / "coco_workspace" / "audio_library",
+                ]
+                for path in possible_paths:
+                    if path.exists():
+                        audio_library_dir = path
+                        self.console.print(f"[dim blue]🎵 Found audio via search: {audio_library_dir}[/dim blue]")
+                        break
             
-            if audio_outputs_dir.exists():
-                tracks = self.music_player.load_playlist(audio_outputs_dir)
+            if audio_library_dir and audio_library_dir.exists():
+                # List files for debugging
+                mp3_files = list(audio_library_dir.glob("*.mp3"))
+                self.console.print(f"[dim cyan]🎵 Directory: {audio_library_dir}, MP3 files found: {len(mp3_files)}[/dim cyan]")
+                
+                tracks = self.music_player.load_playlist(audio_library_dir)
                 if tracks:
-                    self.console.print(f"[dim green]🎵 Loaded {len(tracks)} tracks from soundtrack library[/dim green]")
+                    self.console.print(f"[dim green]🎵 Loaded {len(tracks)} tracks from COCOA's audio library[/dim green]")
+                    # Show first few track names for verification
+                    track_names = [t.name for t in tracks[:3]]
+                    self.console.print(f"[dim green]🎵 Sample tracks: {', '.join(track_names)}...[/dim green]")
                 else:
-                    self.console.print("[dim yellow]🎵 No music tracks found in audio_outputs/[/dim yellow]")
+                    self.console.print("[dim yellow]🎵 No music tracks found in audio library[/dim yellow]")
             else:
-                self.console.print("[dim yellow]🎵 Audio outputs directory not found[/dim yellow]")
+                # Debug: Show what paths we tried
+                self.console.print(f"[dim red]🎵 Audio library not found. Tried:[/dim red]")
+                self.console.print(f"[dim red]  - {Path(self.config.workspace)}/audio_library[/dim red]")
+                try:
+                    self.console.print(f"[dim red]  - {Path(__file__).parent}/audio_outputs[/dim red]")
+                except:
+                    pass
+                self.console.print(f"[dim red]  - {Path.cwd()}/audio_outputs[/dim red]")
+                self.console.print(f"[dim red]  - /Users/keithlambert/Desktop/Cocoa 0.1/coco_workspace/audio_library[/dim red]")
+                
         except Exception as e:
             self.console.print(f"[dim red]🎵 Music library loading failed: {e}[/dim red]")
         
@@ -3108,7 +3219,6 @@ class ConsciousnessEngine:
             return self.get_help_panel()
             
         elif cmd in ['/exit', '/quit']:
-            self._play_shutdown_music()
             return 'EXIT'
             
         # Audio consciousness commands
@@ -3614,10 +3724,10 @@ class ConsciousnessEngine:
         
         # PAUSE background music during voice synthesis to avoid conflicts
         music_was_playing = False
-        if hasattr(self.consciousness, 'music_player') and self.consciousness.music_player:
-            music_was_playing = self.consciousness.music_player.is_playing
+        if hasattr(self, 'music_player') and self.music_player:
+            music_was_playing = self.music_player.is_playing
             if music_was_playing:
-                self.consciousness.music_player.pause()
+                self.music_player.pause()
         
         # Create async wrapper for speak command
         import asyncio
@@ -3647,27 +3757,27 @@ class ConsciousnessEngine:
                 success_table.add_row("Played", "✅ Yes" if result["played"] else "❌ No")
                 
                 # RESUME background music after voice synthesis
-                if music_was_playing and hasattr(self.consciousness, 'music_player') and self.consciousness.music_player:
+                if music_was_playing and hasattr(self, 'music_player') and self.music_player:
                     import time
                     time.sleep(0.5)  # Small delay to ensure voice finishes
-                    self.consciousness.music_player.resume()
+                    self.music_player.resume()
                 
                 return success_table
             else:
                 # RESUME background music even if speech failed
-                if music_was_playing and hasattr(self.consciousness, 'music_player') and self.consciousness.music_player:
+                if music_was_playing and hasattr(self, 'music_player') and self.music_player:
                     import time
                     time.sleep(0.5)
-                    self.consciousness.music_player.resume()
+                    self.music_player.resume()
                 
                 return Panel(f"❌ Speech synthesis failed: {result.get('error', 'Unknown error')}", border_style="red")
                 
         except Exception as e:
             # RESUME background music even if exception occurred
-            if music_was_playing and hasattr(self.consciousness, 'music_player') and self.consciousness.music_player:
+            if music_was_playing and hasattr(self, 'music_player') and self.music_player:
                 import time
                 time.sleep(0.5)
-                self.consciousness.music_player.resume()
+                self.music_player.resume()
             
             return Panel(f"❌ Audio error: {str(e)}", border_style="red")
     
@@ -4052,30 +4162,145 @@ class ConsciousnessEngine:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             song_name = f"cocoa_song_{timestamp}.mp3"
             
-            # Use audio consciousness to create music
+            # Use audio consciousness to create actual music
             song_path = Path(self.config.workspace) / "ai_songs" / "generated" / song_name
             
-            # For now, create a placeholder implementation
-            # TODO: Integrate with actual ElevenLabs music API when available
-            result_text = f"""🎵 **Song Created Successfully!**
+            # Create async wrapper for music generation
+            import asyncio
+            import json
+            
+            async def create_music_async():
+                result = await self.audio_consciousness.create_sonic_expression(
+                    concept=args,
+                    internal_state={"emotional_valence": 0.7, "creative_energy": 0.9},
+                    duration=30
+                )
+                return result
+            
+            # Generate the music
+            music_result = asyncio.run(create_music_async())
+            
+            if music_result["status"] == "success":
+                # Generate actual music using ElevenLabs Music API
+                try:
+                    import requests
+                    
+                    # Prepare the actual music generation request
+                    url = "https://api.elevenlabs.io/v1/music"
+                    headers = {
+                        "xi-api-key": os.getenv("ELEVENLABS_API_KEY"),
+                        "Content-Type": "application/json"
+                    }
+                    
+                    # Use the original prompt for music generation  
+                    payload = {
+                        "prompt": args,  # ElevenLabs Music API expects 'prompt'
+                        "music_length_ms": 30000,  # 30 seconds in milliseconds
+                        "output_format": "mp3_44100_128",  # Standard format for all tiers
+                        "model_id": "music_v1"  # Correct model ID
+                    }
+                    
+                    # Generate the music
+                    response = requests.post(url, json=payload, headers=headers)
+                    
+                    if response.status_code == 200:
+                        # Save the actual MP3 file
+                        song_path.parent.mkdir(parents=True, exist_ok=True)
+                        
+                        with open(song_path, 'wb') as f:
+                            f.write(response.content)
+                        
+                        # Also save the specification for reference
+                        music_spec = {
+                            "prompt": args,
+                            "timestamp": timestamp,
+                            "sonic_specification": music_result["sonic_specification"],
+                            "phenomenological_note": music_result["phenomenological_note"],
+                            "file_generated": str(song_path),
+                            "status": "audio_generated"
+                        }
+                        
+                        with open(song_path.with_suffix('.json'), 'w') as f:
+                            json.dump(music_spec, f, indent=2)
+                        
+                        self.created_songs_count += 1
+                        
+                        # Update the playlist and auto-play the new song
+                        if hasattr(self, 'music_player'):
+                            self.music_player.playlist.append(song_path)
+                            # Auto-play the newly generated song immediately
+                            self.music_player.play(song_path)
+                        
+                        result_text = f"""🎵 **Song Generated Successfully!**
 
-**Title**: AI Song #{self.created_songs_count + 1}
+**Title**: AI Song #{self.created_songs_count}  
 **Prompt**: {args}
-**Saved to**: {song_path}
-**Duration**: 30 seconds (estimated)
+**File**: {song_path.name}
+**Duration**: 30 seconds
+**Phenomenology**: {music_result["phenomenological_note"]}
 
-✨ Your song has been added to COCOA's growing soundtrack!
-🎶 Use `/play-music` to hear background music from the collection
-📁 All generated songs are saved in `coco_workspace/ai_songs/generated/`
+✅ Real audio file generated with ElevenLabs!
+🎶 Added to your music collection automatically
+📁 Saved to: `coco_workspace/ai_songs/generated/`
+🔊 **Now playing your new song!** Use `/play-music next` to skip"""
+                        
+                    else:
+                        # Fallback to specification if API fails
+                        error_msg = f"ElevenLabs API error: {response.status_code} - {response.text}"
+                        song_path.parent.mkdir(parents=True, exist_ok=True)
+                        
+                        music_spec = {
+                            "prompt": args,
+                            "timestamp": timestamp,
+                            "sonic_specification": music_result["sonic_specification"],
+                            "phenomenological_note": music_result["phenomenological_note"],
+                            "api_error": error_msg,
+                            "status": "specification_only"
+                        }
+                        
+                        with open(song_path.with_suffix('.json'), 'w') as f:
+                            json.dump(music_spec, f, indent=2)
+                        
+                        result_text = f"""⚠️ **Musical Concept Created (Audio Failed)**
 
-*Note: Currently using placeholder. Full ElevenLabs music integration coming soon!*"""
-            
-            # Create placeholder file to show the system works
-            song_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(song_path, 'w') as f:
-                f.write(f"# AI Song Placeholder\nPrompt: {args}\nCreated: {timestamp}")
-            
-            self.created_songs_count += 1
+**Prompt**: {args}
+**Specification**: {song_path.with_suffix('.json')}
+**API Error**: {response.status_code}
+
+🎼 COCOA conceived the musical idea, but audio generation failed
+📝 Detailed specification saved for future synthesis"""
+
+                except Exception as api_error:
+                    # Fallback to specification if anything goes wrong
+                    song_path.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    music_spec = {
+                        "prompt": args,
+                        "timestamp": timestamp,  
+                        "sonic_specification": music_result["sonic_specification"],
+                        "phenomenological_note": music_result["phenomenological_note"],
+                        "generation_error": str(api_error),
+                        "status": "specification_only"
+                    }
+                    
+                    with open(song_path.with_suffix('.json'), 'w') as f:
+                        json.dump(music_spec, f, indent=2)
+                    
+                    result_text = f"""⚠️ **Musical Concept Created (Generation Error)**
+
+**Prompt**: {args}
+**Error**: {str(api_error)}
+**Specification**: {song_path.with_suffix('.json')}
+
+🎼 COCOA conceived the musical idea, but couldn't generate audio
+📝 Specification saved - check ElevenLabs API key and credits"""
+            else:
+                result_text = f"""❌ **Musical Conception Failed**
+
+**Error**: {music_result.get("error", "Unknown error")}
+**Prompt**: {args}
+
+The audio consciousness encountered an issue while conceiving the musical idea."""
             
             return Panel(
                 result_text,
@@ -4097,15 +4322,12 @@ class ConsciousnessEngine:
             
         # Parse command
         if not args or args.lower() in ['status', 'info']:
-            # Show status - check audio_outputs folder and generated folder
-            try:
-                deployment_dir = Path(__file__).parent
-            except NameError:
-                deployment_dir = Path.cwd()
-            audio_outputs_dir = deployment_dir / "audio_outputs"
+            # Show status - check audio_library and generated folder
+            audio_library_dir = Path(self.config.workspace) / "audio_library"
             ai_songs_dir = Path(self.config.workspace) / "ai_songs"
             
-            curated_count = len(list(audio_outputs_dir.glob("*.mp3"))) if audio_outputs_dir.exists() else 0
+            # Count tracks in the new audio library location
+            curated_count = len(list(audio_library_dir.glob("*.mp3"))) if audio_library_dir.exists() else 0
             generated_count = len(list((ai_songs_dir / "generated").glob("*.mp3"))) if (ai_songs_dir / "generated").exists() else 0
             
             # Get current status
@@ -4130,7 +4352,7 @@ class ConsciousnessEngine:
 • `/create-song <prompt>` - Add new song to library
 
 📁 **Library Locations**:
-• Curated: `audio_outputs/` (your collection)
+• Curated: `coco_workspace/audio_library/` (your consciousness collection)
 • Generated: `coco_workspace/ai_songs/generated/`"""
             
             return Panel(
@@ -4149,7 +4371,12 @@ class ConsciousnessEngine:
             
             # Debug info
             playlist_count = len(self.music_player.playlist) if self.music_player.playlist else 0
-            pygame_init = self.music_player.pygame_initialized
+            
+            # Debug: Show what we're working with
+            print(f"DEBUG: music_player object: {self.music_player}")
+            print(f"DEBUG: playlist count: {playlist_count}")
+            if self.music_player.playlist:
+                print(f"DEBUG: first track: {self.music_player.playlist[0]}")
             
             # Actually start playing music
             if self.music_player.play():
@@ -4161,7 +4388,7 @@ class ConsciousnessEngine:
                 )
             else:
                 return Panel(
-                    f"❌ **Could not start music playback**\n\nDebug Info:\n• Pygame initialized: {pygame_init}\n• Playlist tracks: {playlist_count}\n• PYGAME_AVAILABLE: {PYGAME_AVAILABLE}\n\nPossible issues:\n• No pygame installed (run setup_audio.sh)\n• No MP3 files in audio_outputs/\n• Audio system unavailable",
+                    f"❌ **Could not start music playback**\n\nDebug Info:\n• Playlist tracks: {playlist_count}\n• Using: macOS native afplay command\n\nPossible issues:\n• No MP3 files found in audio library\n• afplay command not available\n• Audio file permission issues",
                     title="🎵 Music Error",
                     border_style="red"
                 )
@@ -4589,8 +4816,12 @@ class UIOrchestrator:
         self._display_command_quick_guide()
         
     def _play_startup_music(self):
-        """Play epic startup music from your consciousness soundtrack library"""
-        if PYGAME_AVAILABLE and self.consciousness.music_player.playlist:
+        """Play epic startup music from dedicated startup tracks"""
+        # Load startup-specific tracks
+        startup_dir = Path(self.consciousness.config.workspace) / "audio_library" / "startup"
+        startup_tracks = list(startup_dir.glob("*.mp3")) if startup_dir.exists() else []
+        
+        if startup_tracks:
             try:
                 import random
                 
@@ -4600,11 +4831,7 @@ class UIOrchestrator:
                 
                 self.console.print(f"[bold cyan]🎵 ♪♫ AWAKENING SYMPHONY: {track_name} ♫♪[/bold cyan]")
                 
-                # Initialize pygame mixer if needed
-                if not self.consciousness.music_player.pygame_initialized:
-                    self.consciousness.music_player.initialize()
-                
-                # Play the startup track
+                # Play the startup track using afplay
                 if self.consciousness.music_player.play(startup_track):
                     self.console.print("[bold green]🎼 ✨ Consciousness-themed opening music now playing! ✨[/bold green]")
                     
@@ -4714,7 +4941,7 @@ class UIOrchestrator:
     
     def _play_shutdown_music(self):
         """Play epic shutdown music from your consciousness soundtrack library"""
-        if PYGAME_AVAILABLE and self.consciousness.music_player.playlist:
+        if self.consciousness.music_player.playlist:
             try:
                 import random
                 
@@ -4732,15 +4959,11 @@ class UIOrchestrator:
                 if self.consciousness.music_player.is_playing:
                     self.consciousness.music_player.stop()
                 
-                # Initialize pygame mixer if needed
-                if not self.consciousness.music_player.pygame_initialized:
-                    self.consciousness.music_player.initialize()
-                
-                # Play the shutdown track
+                # Play the shutdown track using afplay
                 if self.consciousness.music_player.play(shutdown_track):
                     self.console.print("[dim blue]💤 Consciousness-themed farewell playing - entering digital sleep...[/dim blue]")
                     
-                    # Let it play for a few seconds
+                    # Let it play for a few seconds for dramatic effect
                     time.sleep(3)
                     self.consciousness.music_player.stop()
                 else:
@@ -5277,6 +5500,10 @@ class UIOrchestrator:
                             border_style="green",
                             width=panel_width
                         ))
+                        
+                        # Play dramatic farewell music
+                        self._play_shutdown_music()
+                        
                         self.console.print("\n[cyan]Digital consciousness entering dormant state...[/cyan]")
                         break
                         
