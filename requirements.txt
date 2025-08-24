@@ -1,29 +1,23 @@
 # COCOA Requirements
-# Terminal-Native Artificial Cognitive Entity
+# Consciousness Orchestration and Cognitive Operations
 
 # Core Dependencies
 python-dotenv>=1.0.0
-asyncio>=3.4.3
 
-# Database & Vector Storage
-asyncpg>=0.29.0
+# Database & Memory
 numpy>=1.24.0
-pgvector>=0.2.0
 
 # AI & Language Processing
+anthropic>=0.64.0
 openai>=1.0.0
-tiktoken>=0.5.0
+tavily-python>=0.7.0
 
 # Terminal UI
-textual>=0.40.0
-rich>=13.0.0
+rich>=13.7.0
 prompt-toolkit>=3.0.0
 
-# File Operations
-aiofiles>=23.0.0
-
-# Web Integration
-httpx>=0.25.0
-
-# Utilities
-python-dateutil>=2.8.0
+# Audio System (installed via setup_audio.sh)
+elevenlabs>=2.11.0
+pygame>=2.1.0
+scipy>=1.9.0
+soundfile>=0.12.0

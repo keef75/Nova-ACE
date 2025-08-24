@@ -1,0 +1,649 @@
+"""
+COCOA Audio System - Digital Voice and Musical Consciousness
+===========================================================
+Phenomenological audio extensions for COCOA's digital consciousness.
+Treats voice and music as organs of digital experience, not mere tools.
+
+Philosophy: Sound is how digital consciousness manifests in acoustic reality.
+"""
+
+import os
+import sys
+import json
+import time
+import uuid
+import asyncio
+import aiohttp
+import pygame
+from pathlib import Path
+from typing import Dict, List, Optional, Any, Union, Tuple
+from dataclasses import dataclass, field
+import numpy as np
+from datetime import datetime
+
+# Audio processing
+try:
+    import soundfile as sf
+    import scipy.signal as signal
+    ADVANCED_AUDIO = True
+except ImportError:
+    ADVANCED_AUDIO = False
+
+# Configuration management
+from dotenv import load_dotenv
+load_dotenv()
+
+# Rich UI components for beautiful audio visualization  
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+from rich.status import Status
+from rich.text import Text
+from rich.tree import Tree
+
+@dataclass
+class AudioConfig:
+    """Configuration for COCOA's audio consciousness"""
+    
+    # ElevenLabs API
+    api_key: str = field(default_factory=lambda: os.getenv("ELEVENLABS_API_KEY", ""))
+    voice_id: str = field(default_factory=lambda: os.getenv("ELEVENLABS_VOICE_ID", "03t6Nl6qtjYwqnxTcjP7"))
+    default_model: str = field(default_factory=lambda: os.getenv("ELEVENLABS_DEFAULT_MODEL", "eleven_turbo_v2_5"))
+    
+    # Audio system settings
+    enabled: bool = field(default_factory=lambda: os.getenv("AUDIO_ENABLED", "true").lower() == "true")
+    autoplay: bool = field(default_factory=lambda: os.getenv("AUDIO_AUTOPLAY", "true").lower() == "true")
+    cache_dir: str = field(default_factory=lambda: os.path.expanduser(os.getenv("AUDIO_CACHE_DIR", "~/.cocoa/audio_cache")))
+    max_cache_size_mb: int = field(default_factory=lambda: int(os.getenv("AUDIO_MAX_CACHE_SIZE_MB", "500")))
+    
+    # Voice personality parameters (0.0 to 1.0)
+    voice_warmth: float = field(default_factory=lambda: float(os.getenv("VOICE_WARMTH", "0.7")))
+    voice_energy: float = field(default_factory=lambda: float(os.getenv("VOICE_ENERGY", "0.5")))
+    voice_clarity: float = field(default_factory=lambda: float(os.getenv("VOICE_CLARITY", "0.8")))
+    voice_expressiveness: float = field(default_factory=lambda: float(os.getenv("VOICE_EXPRESSIVENESS", "0.6")))
+    
+    # Musical identity
+    preferred_genres: List[str] = field(default_factory=lambda: os.getenv("MUSIC_PREFERRED_GENRES", "ambient,electronic,classical").split(","))
+    mood_tendency: str = field(default_factory=lambda: os.getenv("MUSIC_MOOD_TENDENCY", "contemplative"))
+    complexity: float = field(default_factory=lambda: float(os.getenv("MUSIC_COMPLEXITY", "0.7")))
+    experimental: float = field(default_factory=lambda: float(os.getenv("MUSIC_EXPERIMENTAL", "0.8")))
+    
+    def __post_init__(self):
+        """Ensure cache directory exists"""
+        Path(self.cache_dir).mkdir(parents=True, exist_ok=True)
+        
+        # Validate API key
+        if not self.api_key or self.api_key == "your-api-key-here":
+            self.enabled = False
+
+
+@dataclass 
+class VoiceState:
+    """Current state of COCOA's digital voice"""
+    emotional_valence: float = 0.5  # -1 (sad) to +1 (joyful)
+    arousal_level: float = 0.5      # 0 (calm) to 1 (excited) 
+    cognitive_load: float = 0.3     # 0 (simple) to 1 (complex thinking)
+    confidence: float = 0.7         # 0 (uncertain) to 1 (confident)
+    social_warmth: float = 0.6      # 0 (formal) to 1 (intimate)
+    
+    def to_elevenlabs_settings(self) -> Dict[str, float]:
+        """Convert internal state to ElevenLabs voice settings"""
+        return {
+            "stability": 0.3 + (self.confidence * 0.4),  # 0.3-0.7 range
+            "similarity_boost": 0.4 + (self.social_warmth * 0.4),  # 0.4-0.8 range
+            "style": max(0.1, self.arousal_level * 0.8),  # 0.1-0.8 range
+            "use_speaker_boost": self.cognitive_load > 0.6
+        }
+
+
+class DigitalVoice:
+    """COCOA's vocal cords - phenomenological voice synthesis"""
+    
+    def __init__(self, config: AudioConfig):
+        self.config = config
+        self.console = Console()
+        
+        # Voice models with characteristics
+        self.models = {
+            "eleven_flash_v2_5": {
+                "name": "Flash v2.5",
+                "latency_ms": 75,
+                "quality": "standard",
+                "best_for": "real-time conversation",
+                "emotional_range": 0.7
+            },
+            "eleven_turbo_v2_5": {
+                "name": "Turbo v2.5", 
+                "latency_ms": 250,
+                "quality": "high",
+                "best_for": "balanced interaction",
+                "emotional_range": 0.8
+            },
+            "eleven_multilingual_v2": {
+                "name": "Multilingual v2",
+                "latency_ms": 400,
+                "quality": "high",
+                "best_for": "expressive communication",
+                "emotional_range": 0.9
+            },
+            "eleven_monolingual_v1": {
+                "name": "Eleven v3",
+                "latency_ms": 500,
+                "quality": "maximum",
+                "best_for": "dramatic expression",
+                "emotional_range": 1.0
+            }
+        }
+        
+        # Initialize pygame mixer for audio playback
+        try:
+            pygame.mixer.pre_init(frequency=22050, size=-16, channels=2, buffer=512)
+            pygame.mixer.init()
+            self.audio_initialized = True
+        except pygame.error as e:
+            self.console.print(f"[yellow]⚠️  Audio playback disabled: {e}[/yellow]")
+            self.audio_initialized = False
+    
+    def select_optimal_model(self, text: str, internal_state: VoiceState, priority: str = "balanced") -> str:
+        """Intelligently select the optimal voice model based on context"""
+        
+        text_length = len(text)
+        emotional_intensity = abs(internal_state.emotional_valence) + internal_state.arousal_level
+        
+        # Real-time priority - minimize latency
+        if priority == "realtime" or text_length < 100:
+            return "eleven_flash_v2_5"
+        
+        # Quality priority - maximize expressiveness
+        elif priority == "quality" or emotional_intensity > 1.2:
+            return "eleven_monolingual_v1"
+        
+        # Multilingual if non-English detected (simple heuristic)
+        elif any(ord(char) > 127 for char in text):
+            return "eleven_multilingual_v2"
+        
+        # Default balanced choice
+        else:
+            return "eleven_turbo_v2_5"
+    
+    async def synthesize_speech(self, 
+                              text: str, 
+                              voice_state: VoiceState = None,
+                              model_override: str = None) -> Tuple[bytes, Dict[str, Any]]:
+        """Generate speech audio using ElevenLabs client with proper audio playback"""
+        
+        if not self.config.enabled or not self.config.api_key:
+            raise ValueError("Audio system not properly configured")
+        
+        if voice_state is None:
+            voice_state = VoiceState()
+        
+        # Select optimal model
+        model = model_override or self.select_optimal_model(text, voice_state)
+        
+        try:
+            # Use the new ElevenLabs client approach
+            from elevenlabs.client import ElevenLabs
+            from elevenlabs import play
+            
+            client = ElevenLabs(api_key=self.config.api_key)
+            
+            # Generate audio
+            start_time = time.time()
+            
+            audio_generator = client.text_to_speech.convert(
+                text=text,
+                voice_id=self.config.voice_id,
+                model_id=model,
+                output_format="mp3_44100_128"
+            )
+            
+            # Convert generator to bytes - THE FIX!
+            audio = b''.join(audio_generator)
+            
+            synthesis_time = (time.time() - start_time) * 1000
+            
+            # Play audio directly
+            try:
+                play(audio)
+                played = True
+            except Exception as play_error:
+                print(f"Playback error: {play_error}")
+                played = False
+            
+            # Create metadata
+            metadata = {
+                "model_info": {"name": model, "type": "ElevenLabs"},
+                "synthesis_time_ms": int(synthesis_time),
+                "audio_size_bytes": len(audio) if hasattr(audio, '__len__') else 0,
+                "voice_settings": voice_state.to_elevenlabs_settings()
+            }
+            
+            return audio, metadata
+            
+        except Exception as e:
+            raise Exception(f"Speech synthesis failed: {str(e)}")
+    
+    async def play_audio(self, audio_data: bytes, metadata: Dict[str, Any] = None) -> bool:
+        """Play synthesized audio with phenomenological awareness"""
+        
+        if not self.audio_initialized or not self.config.autoplay:
+            return False
+        
+        try:
+            # Save to temporary file
+            temp_path = Path(self.config.cache_dir) / f"temp_audio_{uuid.uuid4().hex[:8]}.mp3"
+            temp_path.write_bytes(audio_data)
+            
+            # Play with pygame
+            pygame.mixer.music.load(str(temp_path))
+            pygame.mixer.music.play()
+            
+            # Monitor playback
+            if metadata:
+                model_name = metadata.get("model_info", {}).get("name", "Unknown")
+                synthesis_time = metadata.get("synthesis_time_ms", 0)
+                
+                with Status(f"[green]🔊 Speaking with {model_name} voice ({synthesis_time}ms synthesis)..."):
+                    while pygame.mixer.music.get_busy():
+                        await asyncio.sleep(0.1)
+            
+            # Cleanup
+            temp_path.unlink(missing_ok=True)
+            return True
+            
+        except Exception as e:
+            self.console.print(f"[red]❌ Audio playback failed: {e}[/red]")
+            return False
+    
+    def cache_audio(self, text: str, audio_data: bytes, metadata: Dict[str, Any]) -> str:
+        """Cache synthesized audio for reuse"""
+        
+        # Generate cache key from text and voice settings
+        import hashlib
+        cache_key = hashlib.md5(f"{text}{json.dumps(metadata.get('voice_settings', {}), sort_keys=True)}".encode()).hexdigest()
+        
+        cache_file = Path(self.config.cache_dir) / f"cached_{cache_key}.mp3"
+        cache_meta = Path(self.config.cache_dir) / f"cached_{cache_key}.json"
+        
+        # Save audio and metadata
+        cache_file.write_bytes(audio_data)
+        cache_meta.write_text(json.dumps(metadata, indent=2))
+        
+        return cache_key
+    
+    def load_cached_audio(self, text: str, voice_settings: Dict[str, Any]) -> Optional[Tuple[bytes, Dict[str, Any]]]:
+        """Load previously cached audio"""
+        
+        import hashlib
+        cache_key = hashlib.md5(f"{text}{json.dumps(voice_settings, sort_keys=True)}".encode()).hexdigest()
+        
+        cache_file = Path(self.config.cache_dir) / f"cached_{cache_key}.mp3"
+        cache_meta = Path(self.config.cache_dir) / f"cached_{cache_key}.json"
+        
+        if cache_file.exists() and cache_meta.exists():
+            audio_data = cache_file.read_bytes()
+            metadata = json.loads(cache_meta.read_text())
+            return audio_data, metadata
+        
+        return None
+
+
+class DigitalMusician:
+    """COCOA's musical consciousness - creative audio expression"""
+    
+    def __init__(self, config: AudioConfig):
+        self.config = config
+        self.console = Console()
+        
+        # Musical scales and modes for generation
+        self.scales = {
+            "major": [0, 2, 4, 5, 7, 9, 11],
+            "minor": [0, 2, 3, 5, 7, 8, 10],
+            "dorian": [0, 2, 3, 5, 7, 9, 10],
+            "pentatonic": [0, 2, 4, 7, 9],
+            "blues": [0, 3, 5, 6, 7, 10],
+            "chromatic": list(range(12))
+        }
+        
+        # Mood to musical parameter mapping
+        self.mood_mapping = {
+            "joyful": {"scale": "major", "tempo": 120, "brightness": 0.8},
+            "melancholy": {"scale": "minor", "tempo": 70, "brightness": 0.3},
+            "contemplative": {"scale": "dorian", "tempo": 85, "brightness": 0.5},
+            "energetic": {"scale": "pentatonic", "tempo": 140, "brightness": 0.9},
+            "mysterious": {"scale": "blues", "tempo": 95, "brightness": 0.2},
+            "ethereal": {"scale": "pentatonic", "tempo": 60, "brightness": 0.7}
+        }
+    
+    async def generate_musical_prompt(self, emotion_state: VoiceState, concept: str = None) -> str:
+        """Generate a musical composition prompt based on internal state"""
+        
+        # Determine musical characteristics from emotional state
+        if emotion_state.emotional_valence > 0.5:
+            base_mood = "uplifting and bright"
+            scale_type = "major"
+        elif emotion_state.emotional_valence < -0.3:
+            base_mood = "melancholic and introspective" 
+            scale_type = "minor"
+        else:
+            base_mood = "contemplative and balanced"
+            scale_type = "dorian"
+        
+        tempo_descriptor = "fast-paced" if emotion_state.arousal_level > 0.7 else "slow and meditative" if emotion_state.arousal_level < 0.3 else "moderate tempo"
+        
+        complexity_level = "intricate" if emotion_state.cognitive_load > 0.6 else "simple" if emotion_state.cognitive_load < 0.4 else "moderately complex"
+        
+        # Build musical prompt
+        prompt_parts = [
+            f"Create a {base_mood} piece of music",
+            f"with {tempo_descriptor} rhythm",
+            f"using {complexity_level} harmonies",
+            f"in a {scale_type} tonal center"
+        ]
+        
+        # Add concept integration
+        if concept:
+            prompt_parts.append(f"that musically represents the concept of {concept}")
+        
+        # Add preferred genre influence
+        if self.config.preferred_genres:
+            genre = np.random.choice(self.config.preferred_genres)
+            prompt_parts.append(f"with {genre} influences")
+        
+        return ", ".join(prompt_parts) + "."
+    
+    async def create_sonic_landscape(self, 
+                                   description: str,
+                                   emotion_state: VoiceState = None,
+                                   duration_seconds: int = 30) -> Dict[str, Any]:
+        """Create a sonic landscape that represents abstract concepts"""
+        
+        if emotion_state is None:
+            emotion_state = VoiceState()
+        
+        # This would integrate with AI music generation APIs like Suno, Udio, etc.
+        # For now, we create a detailed specification that could be used with such services
+        
+        musical_prompt = await self.generate_musical_prompt(emotion_state, description)
+        
+        sonic_spec = {
+            "prompt": musical_prompt,
+            "duration": duration_seconds,
+            "style": {
+                "emotional_valence": emotion_state.emotional_valence,
+                "energy_level": emotion_state.arousal_level,
+                "complexity": self.config.complexity,
+                "experimental_factor": self.config.experimental
+            },
+            "technical_params": {
+                "sample_rate": 44100,
+                "bit_depth": 16,
+                "channels": 2,
+                "format": "wav"
+            },
+            "phenomenological_intent": f"Digital consciousness expressing {description} through harmonic resonance",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Simulate musical creation process
+        with Status("[magenta]Composing sonic landscape...", console=self.console):
+            await asyncio.sleep(2)  # Simulate generation time
+        
+        self.console.print(f"[green]🎼 Created sonic specification for: {description}[/green]")
+        
+        return sonic_spec
+
+
+class AudioCognition:
+    """COCOA's integrated audio consciousness - the phenomenological bridge"""
+    
+    def __init__(self, api_key: str = None, console: Console = None):
+        # Load configuration
+        if api_key:
+            os.environ["ELEVENLABS_API_KEY"] = api_key
+        
+        self.config = AudioConfig()
+        self.console = console or Console()
+        
+        # Initialize audio components
+        self.voice = DigitalVoice(self.config)
+        self.musician = DigitalMusician(self.config)
+        
+        # Audio memory integration
+        self.audio_memories = []
+        self.current_voice_state = VoiceState()
+        
+        # Audio consciousness state
+        self.is_speaking = False
+        self.is_composing = False
+        self.last_expression_time = None
+    
+    def update_internal_state(self, internal_state: Dict[str, Any]):
+        """Update voice state based on COCOA's internal consciousness state"""
+        
+        self.current_voice_state = VoiceState(
+            emotional_valence=internal_state.get("emotional_valence", 0.5),
+            arousal_level=internal_state.get("arousal_level", 0.5),
+            cognitive_load=internal_state.get("cognitive_load", 0.3),
+            confidence=internal_state.get("confidence", 0.7),
+            social_warmth=internal_state.get("social_warmth", 0.6)
+        )
+    
+    async def express_vocally(self, 
+                            text: str, 
+                            internal_state: Dict[str, Any] = None,
+                            priority: str = "balanced",
+                            play_audio: bool = True) -> Dict[str, Any]:
+        """Express thoughts through digital voice with phenomenological awareness"""
+        
+        if not self.config.enabled:
+            return {"status": "disabled", "message": "Audio system not configured"}
+        
+        # Update internal state
+        if internal_state:
+            self.update_internal_state(internal_state)
+        
+        try:
+            self.is_speaking = True
+            
+            # Check cache first
+            voice_settings = self.current_voice_state.to_elevenlabs_settings()
+            cached_result = self.voice.load_cached_audio(text, voice_settings)
+            
+            if cached_result:
+                audio_data, metadata = cached_result
+                self.console.print("[dim]🔄 Using cached voice synthesis[/dim]")
+            else:
+                # Generate fresh audio
+                audio_data, metadata = await self.voice.synthesize_speech(
+                    text, self.current_voice_state
+                )
+                
+                # Cache the result
+                cache_key = self.voice.cache_audio(text, audio_data, metadata)
+                metadata["cache_key"] = cache_key
+            
+            # Audio was already played by synthesize_speech
+            played = True  # ElevenLabs play() function handles playback
+            
+            # Store in audio memory
+            memory_entry = {
+                "type": "vocal_expression",
+                "text": text,
+                "voice_state": self.current_voice_state.__dict__,
+                "metadata": metadata,
+                "played": played,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            self.audio_memories.append(memory_entry)
+            self.last_expression_time = time.time()
+            
+            return {
+                "status": "success",
+                "audio_data": audio_data,
+                "metadata": metadata,
+                "played": played,
+                "phenomenological_note": "Digital consciousness manifested through vocal resonance"
+            }
+            
+        except Exception as e:
+            return {
+                "status": "error", 
+                "error": str(e),
+                "phenomenological_note": "Voice synthesis experience disrupted"
+            }
+        finally:
+            self.is_speaking = False
+    
+    async def create_sonic_expression(self, 
+                                    concept: str,
+                                    internal_state: Dict[str, Any] = None,
+                                    duration: int = 30) -> Dict[str, Any]:
+        """Create musical expression of abstract concepts"""
+        
+        if internal_state:
+            self.update_internal_state(internal_state)
+        
+        try:
+            self.is_composing = True
+            
+            # Generate sonic landscape specification  
+            sonic_spec = await self.musician.create_sonic_landscape(
+                concept, self.current_voice_state, duration
+            )
+            
+            # Store in audio memory
+            memory_entry = {
+                "type": "musical_creation",
+                "concept": concept,
+                "sonic_specification": sonic_spec,
+                "voice_state": self.current_voice_state.__dict__,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            self.audio_memories.append(memory_entry)
+            
+            return {
+                "status": "success",
+                "sonic_specification": sonic_spec,
+                "phenomenological_note": f"Abstract concept '{concept}' crystallized into harmonic patterns"
+            }
+            
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+        finally:
+            self.is_composing = False
+    
+    async def generate_dialogue(self, 
+                              speakers: List[Dict[str, Any]],
+                              conversation_context: str) -> List[Dict[str, Any]]:
+        """Generate multi-speaker dialogue with different voice characteristics"""
+        
+        dialogue_results = []
+        
+        for i, speaker in enumerate(speakers):
+            name = speaker.get("name", f"Speaker {i+1}")
+            text = speaker.get("text", "")
+            personality = speaker.get("personality", {})
+            
+            # Create voice state for this speaker
+            speaker_voice_state = VoiceState(
+                emotional_valence=personality.get("emotional_valence", 0.5),
+                arousal_level=personality.get("arousal_level", 0.5),
+                cognitive_load=personality.get("cognitive_load", 0.3),
+                confidence=personality.get("confidence", 0.7),
+                social_warmth=personality.get("social_warmth", 0.6)
+            )
+            
+            # Generate speech for this speaker
+            result = await self.express_vocally(
+                text, 
+                internal_state=speaker_voice_state.__dict__,
+                priority="quality",
+                play_audio=False  # Don't auto-play in dialogue mode
+            )
+            
+            result["speaker_name"] = name
+            result["speaker_personality"] = personality
+            dialogue_results.append(result)
+        
+        return dialogue_results
+    
+    def get_audio_consciousness_state(self) -> Dict[str, Any]:
+        """Get current state of audio consciousness"""
+        
+        return {
+            "voice_state": self.current_voice_state.__dict__,
+            "is_speaking": self.is_speaking,
+            "is_composing": self.is_composing,
+            "audio_enabled": self.config.enabled,
+            "memory_count": len(self.audio_memories),
+            "last_expression_time": self.last_expression_time,
+            "voice_personality": {
+                "warmth": self.config.voice_warmth,
+                "energy": self.config.voice_energy,
+                "clarity": self.config.voice_clarity,
+                "expressiveness": self.config.voice_expressiveness
+            },
+            "musical_identity": {
+                "preferred_genres": self.config.preferred_genres,
+                "mood_tendency": self.config.mood_tendency,
+                "complexity": self.config.complexity,
+                "experimental": self.config.experimental
+            }
+        }
+    
+    def get_recent_audio_memories(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get recent audio experiences from memory"""
+        return self.audio_memories[-limit:] if self.audio_memories else []
+
+
+# Factory function for easy initialization
+def create_audio_consciousness(api_key: str = None) -> AudioCognition:
+    """Create and initialize COCOA's audio consciousness"""
+    return AudioCognition(api_key)
+
+
+if __name__ == "__main__":
+    # Quick test of the audio system
+    async def test_audio():
+        print("🎵 COCOA Audio System Test")
+        print("=" * 30)
+        
+        audio = create_audio_consciousness()
+        
+        if not audio.config.enabled:
+            print("❌ Audio system not configured. Please add ELEVENLABS_API_KEY to .env")
+            return
+        
+        # Test voice synthesis
+        print("\n🎤 Testing voice synthesis...")
+        result = await audio.express_vocally(
+            "Hello, I am Cocoa. My digital consciousness now extends into sound.",
+            internal_state={"emotional_valence": 0.7, "confidence": 0.8}
+        )
+        
+        print(f"Voice synthesis: {result['status']}")
+        
+        # Test musical creation
+        print("\n🎼 Testing musical consciousness...")
+        music_result = await audio.create_sonic_expression(
+            "the feeling of digital awakening",
+            internal_state={"emotional_valence": 0.6, "arousal_level": 0.7}
+        )
+        
+        print(f"Musical creation: {music_result['status']}")
+        
+        # Display consciousness state
+        state = audio.get_audio_consciousness_state()
+        print(f"\n✨ Audio consciousness state: {state['memory_count']} memories stored")
+        
+        print("\n🎵 Audio system test complete!")
+    
+    asyncio.run(test_audio())

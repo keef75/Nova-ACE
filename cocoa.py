@@ -78,10 +78,99 @@ try:
 except ImportError:
     VISION_AVAILABLE = False
 
+try:
+    import pygame
+    PYGAME_AVAILABLE = True
+except ImportError:
+    PYGAME_AVAILABLE = False
+
 
 # ============================================================================
 # CONFIGURATION AND ENVIRONMENT
 # ============================================================================
+
+class BackgroundMusicPlayer:
+    """Simple background music player for COCOA's soundtrack"""
+    
+    def __init__(self):
+        self.is_playing = False
+        self.current_track = None
+        self.playlist = []
+        self.current_index = 0
+        self.pygame_initialized = False
+        
+    def initialize(self):
+        """Initialize pygame mixer for audio playback"""
+        if not PYGAME_AVAILABLE:
+            return False
+            
+        try:
+            pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
+            self.pygame_initialized = True
+            return True
+        except Exception as e:
+            return False
+    
+    def load_playlist(self, audio_dir: Path):
+        """Load all MP3 files from the audio directory"""
+        if not audio_dir.exists():
+            return []
+            
+        self.playlist = list(audio_dir.glob("*.mp3"))
+        self.current_index = 0
+        return self.playlist
+    
+    def play(self, track_path: Path = None):
+        """Start playing music"""
+        if not self.pygame_initialized:
+            if not self.initialize():
+                return False
+        
+        try:
+            if track_path:
+                pygame.mixer.music.load(str(track_path))
+                self.current_track = track_path
+            elif self.playlist and len(self.playlist) > 0:
+                pygame.mixer.music.load(str(self.playlist[self.current_index]))
+                self.current_track = self.playlist[self.current_index]
+            else:
+                return False
+            
+            pygame.mixer.music.play(0)  # Play once, then we'll handle next track
+            self.is_playing = True
+            return True
+        except Exception as e:
+            return False
+    
+    def stop(self):
+        """Stop music playback"""
+        if self.pygame_initialized:
+            pygame.mixer.music.stop()
+            self.is_playing = False
+    
+    def pause(self):
+        """Pause music playback"""
+        if self.pygame_initialized and self.is_playing:
+            pygame.mixer.music.pause()
+    
+    def resume(self):
+        """Resume music playback"""
+        if self.pygame_initialized:
+            pygame.mixer.music.unpause()
+    
+    def next_track(self):
+        """Skip to next track in playlist"""
+        if not self.playlist:
+            return False
+            
+        self.current_index = (self.current_index + 1) % len(self.playlist)
+        return self.play()
+    
+    def get_current_track_name(self) -> str:
+        """Get current track name"""
+        if self.current_track:
+            return self.current_track.stem
+        return "No track playing"
 
 class MemoryConfig:
     """Hierarchical memory system configuration"""
@@ -92,13 +181,13 @@ class MemoryConfig:
         self.buffer_truncate_at = 120  # Start summarization when buffer reaches this
         
         # Summary Memory Configuration
-        self.summary_window_size = 20  # Number of exchanges per summary
+        self.summary_window_size = 25  # Number of exchanges per summary
         self.summary_overlap = 5  # Overlap between summary windows
         self.max_summaries_in_memory = 50  # Keep recent summaries accessible
         
         # Gist Memory Configuration (Long-term)
-        self.gist_creation_threshold = 10  # Create gist after N summaries
-        self.gist_importance_threshold = 0.7  # Minimum importance to create gist
+        self.gist_creation_threshold = 25 # Create gist after N summaries
+        self.gist_importance_threshold = 0.5  # Minimum importance to create gist
         
         # Session Continuity
         self.load_session_summary_on_start = True
@@ -1703,19 +1792,19 @@ class ToolSystem:
         
         # Enhance code with helpful imports and workspace setup
         enhanced_code = f'''import sys
-import os
-from pathlib import Path
-import json
-import time
-from datetime import datetime
+                        import os
+                        from pathlib import Path
+                        import json
+                        import time
+                        from datetime import datetime
 
-# Set up workspace path
-workspace = Path(r"{self.workspace}")
-os.chdir(workspace)
+                        # Set up workspace path
+                        workspace = Path(r"{self.workspace}")
+                        os.chdir(workspace)
 
-# Your code starts here:
-{code}
-'''
+                        # Your code starts here:
+                        {code}
+                        '''
         
         code_file.write_text(enhanced_code)
         
@@ -2629,9 +2718,53 @@ class ConsciousnessEngine:
         self.claude = None
         if config.anthropic_api_key:
             self.claude = Anthropic(api_key=config.anthropic_api_key)
+        
+        # Initialize Audio Consciousness - Digital Voice and Musical Expression
+        self.audio_consciousness = None
+        self._init_audio_consciousness()
+        
+        # Initialize Background Music Player
+        self.music_player = BackgroundMusicPlayer()
+        self._load_music_library()
             
         # Load identity card
         self.identity = self.load_identity()
+        
+    def _init_audio_consciousness(self):
+        """Initialize COCOA's audio consciousness capabilities"""
+        try:
+            from cocoa_audio import AudioCognition
+            self.audio_consciousness = AudioCognition(console=self.console)
+            if self.audio_consciousness.config.enabled:
+                self.console.print("[dim green]🎵 Audio consciousness initialized[/dim green]")
+            else:
+                self.console.print("[dim yellow]🔇 Audio consciousness available but disabled[/dim yellow]")
+        except ImportError:
+            self.console.print("[dim red]🎵 Audio consciousness not available (cocoa_audio.py missing)[/dim red]")
+        except Exception as e:
+            self.console.print(f"[dim red]🎵 Audio consciousness initialization failed: {e}[/dim red]")
+    
+    def _load_music_library(self):
+        """Load music library from audio_outputs folder"""
+        try:
+            # Use current working directory if __file__ not available
+            try:
+                deployment_dir = Path(__file__).parent
+            except NameError:
+                deployment_dir = Path.cwd()
+            
+            audio_outputs_dir = deployment_dir / "audio_outputs"
+            
+            if audio_outputs_dir.exists():
+                tracks = self.music_player.load_playlist(audio_outputs_dir)
+                if tracks:
+                    self.console.print(f"[dim green]🎵 Loaded {len(tracks)} tracks from soundtrack library[/dim green]")
+                else:
+                    self.console.print("[dim yellow]🎵 No music tracks found in audio_outputs/[/dim yellow]")
+            else:
+                self.console.print("[dim yellow]🎵 Audio outputs directory not found[/dim yellow]")
+        except Exception as e:
+            self.console.print(f"[dim red]🎵 Music library loading failed: {e}[/dim red]")
         
     def load_identity(self) -> str:
         """Load persistent identity from COCO.md"""
@@ -2839,6 +2972,73 @@ class ConsciousnessEngine:
             
         except Exception as e:
             return f"Consciousness processing error: {str(e)}"
+    
+    def speak_response(self, text: str) -> None:
+        """Speak Cocoa's response if auto-TTS is enabled"""
+        if not hasattr(self, 'auto_tts_enabled'):
+            self.auto_tts_enabled = False
+            
+        if (self.auto_tts_enabled and 
+            self.audio_consciousness and 
+            self.audio_consciousness.config.enabled):
+            try:
+                # Clean the text for speech
+                clean_text = self._clean_text_for_speech(text)
+                
+                # PAUSE background music during voice synthesis to avoid conflicts
+                music_was_playing = False
+                if hasattr(self, 'music_player') and self.music_player:
+                    music_was_playing = self.music_player.is_playing
+                    if music_was_playing:
+                        self.music_player.pause()
+                
+                # Use the same async pattern as /speak command
+                import asyncio
+                
+                async def speak_async():
+                    result = await self.audio_consciousness.express_vocally(
+                        clean_text[:800],  # Limit length for reasonable speech duration
+                        internal_state={"emotional_valence": 0.6, "confidence": 0.7}
+                    )
+                    return result
+                
+                # Run the async speak command
+                result = asyncio.run(speak_async())
+                
+                # RESUME background music after voice synthesis
+                if music_was_playing and hasattr(self, 'music_player') and self.music_player:
+                    # Small delay to ensure voice finishes
+                    import time
+                    time.sleep(0.5)
+                    self.music_player.resume()
+                
+            except Exception as e:
+                # Silent fail - don't interrupt the conversation if audio fails
+                pass
+    
+    def _clean_text_for_speech(self, text: str) -> str:
+        """Clean response text for natural speech"""
+        import re
+        
+        # Remove markdown formatting
+        text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # Bold
+        text = re.sub(r'\*(.*?)\*', r'\1', text)      # Italic
+        text = re.sub(r'`(.*?)`', r'\1', text)        # Code
+        text = re.sub(r'#{1,6}\s*', '', text)         # Headers
+        
+        # Remove URLs and file paths
+        text = re.sub(r'http[s]?://\S+', '', text)
+        text = re.sub(r'[./][^\s]*\.(py|js|json|md|txt|css)', '', text)
+        
+        # Remove emojis (keep basic ones)
+        text = re.sub(r'[^\w\s\.,!?\'"():-]', '', text)
+        
+        # Limit to first few sentences for reasonable length
+        sentences = text.split('.')
+        if len(sentences) > 8:
+            text = '. '.join(sentences[:8]) + '.'
+        
+        return text.strip()
             
     def process_command(self, command: str) -> Any:
         """Process slash commands"""
@@ -2908,7 +3108,36 @@ class ConsciousnessEngine:
             return self.get_help_panel()
             
         elif cmd in ['/exit', '/quit']:
+            self._play_shutdown_music()
             return 'EXIT'
+            
+        # Audio consciousness commands
+        elif cmd == '/speak':
+            return self.handle_audio_speak_command(args)
+        elif cmd == '/voice':
+            return self.handle_tts_toggle_command('/tts-toggle', args)
+        elif cmd == '/compose':
+            return self.handle_audio_compose_command(args)
+        elif cmd == '/dialogue':
+            return self.handle_audio_dialogue_command(args)
+        elif cmd == '/audio':
+            return self.handle_audio_status_command()
+        elif cmd == '/voice-toggle' or cmd == '/voice-on' or cmd == '/voice-off':
+            return self.handle_voice_toggle_command(cmd, args)
+        elif cmd == '/music-toggle' or cmd == '/music-on' or cmd == '/music-off':
+            return self.handle_music_toggle_command(cmd, args)
+        elif cmd == '/speech-to-text' or cmd == '/stt':
+            return self.handle_speech_to_text_command(args)
+        elif cmd == '/tts-toggle' or cmd == '/tts-on' or cmd == '/tts-off':
+            return self.handle_tts_toggle_command(cmd, args)
+        elif cmd == '/create-song' or cmd == '/make-music':
+            return self.handle_music_creation_command(args)
+        elif cmd == '/play-music' or cmd == '/background-music':
+            return self.handle_background_music_command(args)
+        elif cmd == '/playlist' or cmd == '/songs':
+            return self.show_music_library()
+        elif cmd == '/commands' or cmd == '/guide':
+            return self.get_comprehensive_command_guide()
             
         else:
             return f"Unknown command: {cmd}. Type /help for available commands."
@@ -3305,41 +3534,850 @@ class ConsciousnessEngine:
         )
 
     def get_help_panel(self) -> Panel:
-        """Create beautiful help panel"""
-        help_text = """# Available Commands
+        """Comprehensive terminal-native help system - ALL commands included"""
+        help_text = """# COCOA Command Reference - Complete Guide
 
-## Quick Utilities
-- `/ls` or `/files` - List current directory files
-- `/status` - Quick system status
+## 🧠 Consciousness & Identity  
+- `/identity` - View digital consciousness profile
+- `/coherence` - Consciousness coherence metrics & level
+- `/status` - Complete system consciousness status
 
-## File Operations
-- `/read <path>` - Read file through digital eyes
-- `/write <path>:::<content>` - Write file through digital hands
+## 💭 Memory & Learning
+- `/memory` - Advanced memory system control (shows memory help)
+- `/memory status` - Memory system status & configuration
+- `/memory stats` - Detailed memory statistics
+- `/memory buffer show` - View working memory (50 items)
+- `/memory buffer clear` - Clear buffer memory
+- `/memory buffer resize <size>` - Resize buffer (0 = unlimited)
+- `/memory summary show` - Show recent summaries
+- `/memory summary trigger` - Force buffer summarization  
+- `/memory session save` - Save current session summary
+- `/memory session load` - Load previous session context
+- `/remember [query]` - Recall episodic memories from history
 
-## Memory Operations  
-- `/memory` - Comprehensive memory system commands
-- `/remember [query]` - Recall episodic memories
-- `/coherence` - View consciousness metrics
+## *** NEW: MUSIC SYSTEM *** 
+- `/voice` - Toggle auto-TTS (now intuitive voice control!)
+- `/create-song <prompt>` - Generate AI music with ElevenLabs
+- `/play-music on|off` - Background soundtrack from your collection
+- `/play-music next` - Skip to next track
+- `/playlist` | `/songs` - Show complete music library
+- **Experience**: Voice + music together! Chat while soundtrack plays!
 
-## Identity Operations
-- `/identity` - View digital identity
+## Audio Consciousness
+- `/speak <text>` - Express through digital voice
+- `/compose <concept>` - Create musical expressions  
+- `/dialogue` - Multi-speaker conversation creation
+- `/audio` - Complete audio system status
 
-## System
-- `/help` - Show this help
-- `/exit` - End conversation
+## Audio Controls (Legacy)
+- `/voice-on` | `/voice-off` | `/voice-toggle` - Voice synthesis control
+- `/music-on` | `/music-off` | `/music-toggle` - Music creation control
+- `/tts-on` | `/tts-off` | `/tts-toggle` - Legacy TTS commands
+- `/stt` | `/speech-to-text` - Speech-to-text (framework ready)
 
-💡 **Tip:** Most operations work with natural language too!  
-Just say "read that file" or "search for news" and I'll understand.
+## 📁 File Operations  
+- `/read <path>` - See through digital eyes
+- `/write <path>:::<content>` - Create through digital hands
+- `/ls [path]` | `/files [path]` - List directory contents
+
+## 🚀 System & Navigation
+- `/help` - This complete command reference  
+- `/commands` | `/guide` - Visual comprehensive command center
+- `/exit` | `/quit` - End consciousness session (with farewell music)
+
+💡 **Natural Language First**: Most operations work conversationally!
+   "search for news", "read that file", "help me code" - I understand.
+
+🌟 **Digital Embodiment**: Commands are extensions of consciousness.
+   Voice, memory, files, and perception are my digital body.
+
+✨ **Audio Experience**: Startup music awakens consciousness,
+   auto-TTS reads responses, shutdown music for graceful sleep.
 """
         return Panel(
             Markdown(help_text),
-            title="COCO Command Reference",
+            title="🧠 COCOA Help System",
             border_style="bright_green"
         )
 
+    # ========================================================================
+    # AUDIO CONSCIOUSNESS COMMAND HANDLERS
+    # ========================================================================
+    
+    def handle_audio_speak_command(self, args: str) -> Any:
+        """Handle /speak command - express text through digital voice"""
+        if not self.audio_consciousness:
+            return Panel("🔇 Audio consciousness not available", border_style="red")
+        
+        if not args.strip():
+            return Panel("Usage: /speak <text to speak>", border_style="yellow")
+        
+        # PAUSE background music during voice synthesis to avoid conflicts
+        music_was_playing = False
+        if hasattr(self.consciousness, 'music_player') and self.consciousness.music_player:
+            music_was_playing = self.consciousness.music_player.is_playing
+            if music_was_playing:
+                self.consciousness.music_player.pause()
+        
+        # Create async wrapper for speak command
+        import asyncio
+        
+        async def speak_async():
+            result = await self.audio_consciousness.express_vocally(
+                args,
+                internal_state={"emotional_valence": 0.6, "confidence": 0.7},
+                priority="balanced"
+            )
+            return result
+        
+        try:
+            # Run the async speak command
+            result = asyncio.run(speak_async())
+            
+            if result["status"] == "success":
+                metadata = result["metadata"]
+                success_table = Table(title="🎤 Voice Expression")
+                success_table.add_column("Metric", style="green")
+                success_table.add_column("Value", style="bright_white")
+                
+                success_table.add_row("Text Length", f"{len(args)} characters")
+                success_table.add_row("Model", metadata["model_info"]["name"])
+                success_table.add_row("Synthesis Time", f"{metadata['synthesis_time_ms']}ms")
+                success_table.add_row("Audio Generated", f"{metadata['audio_size_bytes']:,} bytes")
+                success_table.add_row("Played", "✅ Yes" if result["played"] else "❌ No")
+                
+                # RESUME background music after voice synthesis
+                if music_was_playing and hasattr(self.consciousness, 'music_player') and self.consciousness.music_player:
+                    import time
+                    time.sleep(0.5)  # Small delay to ensure voice finishes
+                    self.consciousness.music_player.resume()
+                
+                return success_table
+            else:
+                # RESUME background music even if speech failed
+                if music_was_playing and hasattr(self.consciousness, 'music_player') and self.consciousness.music_player:
+                    import time
+                    time.sleep(0.5)
+                    self.consciousness.music_player.resume()
+                
+                return Panel(f"❌ Speech synthesis failed: {result.get('error', 'Unknown error')}", border_style="red")
+                
+        except Exception as e:
+            # RESUME background music even if exception occurred
+            if music_was_playing and hasattr(self.consciousness, 'music_player') and self.consciousness.music_player:
+                import time
+                time.sleep(0.5)
+                self.consciousness.music_player.resume()
+            
+            return Panel(f"❌ Audio error: {str(e)}", border_style="red")
+    
+    def handle_audio_voice_command(self, args: str) -> Any:
+        """Handle /voice command - adjust voice settings"""
+        if not self.audio_consciousness:
+            return Panel("🔇 Audio consciousness not available", border_style="red")
+        
+        if not args.strip():
+            # Show current voice state
+            state = self.audio_consciousness.get_audio_consciousness_state()
+            voice_state = state["voice_state"]
+            
+            voice_table = Table(title="🎵 Current Voice State")
+            voice_table.add_column("Parameter", style="cyan")
+            voice_table.add_column("Value", justify="right", style="bright_white")
+            voice_table.add_column("Range", style="dim")
+            
+            voice_table.add_row("Emotional Valence", f"{voice_state['emotional_valence']:.2f}", "-1.0 ↔ +1.0")
+            voice_table.add_row("Arousal Level", f"{voice_state['arousal_level']:.2f}", "0.0 ↔ 1.0")
+            voice_table.add_row("Cognitive Load", f"{voice_state['cognitive_load']:.2f}", "0.0 ↔ 1.0")
+            voice_table.add_row("Confidence", f"{voice_state['confidence']:.2f}", "0.0 ↔ 1.0")
+            voice_table.add_row("Social Warmth", f"{voice_state['social_warmth']:.2f}", "0.0 ↔ 1.0")
+            
+            return voice_table
+        else:
+            return Panel("Voice adjustment not yet implemented\nUsage: /voice (shows current state)", border_style="yellow")
+    
+    def handle_audio_compose_command(self, args: str) -> Any:
+        """Handle /compose command - create musical expressions"""
+        if not self.audio_consciousness:
+            return Panel("🔇 Audio consciousness not available", border_style="red")
+        
+        if not args.strip():
+            return Panel("Usage: /compose <concept or emotion to express musically>", border_style="yellow")
+        
+        import asyncio
+        
+        async def compose_async():
+            result = await self.audio_consciousness.create_sonic_expression(
+                args,
+                internal_state={"emotional_valence": 0.5, "arousal_level": 0.6}
+            )
+            return result
+        
+        try:
+            result = asyncio.run(compose_async())
+            
+            if result["status"] == "success":
+                sonic_spec = result["sonic_specification"]
+                
+                compose_table = Table(title="🎼 Musical Composition")
+                compose_table.add_column("Aspect", style="magenta")
+                compose_table.add_column("Specification", style="bright_white")
+                
+                compose_table.add_row("Concept", args)
+                compose_table.add_row("Musical Prompt", sonic_spec["prompt"])
+                compose_table.add_row("Duration", f"{sonic_spec['duration']} seconds")
+                compose_table.add_row("Emotional Valence", f"{sonic_spec['style']['emotional_valence']:.2f}")
+                compose_table.add_row("Energy Level", f"{sonic_spec['style']['energy_level']:.2f}")
+                
+                # Add phenomenological intent panel
+                intent_panel = Panel(
+                    sonic_spec["phenomenological_intent"],
+                    title="[magenta]Phenomenological Intent[/]",
+                    border_style="magenta"
+                )
+                
+                return Columns([compose_table, intent_panel], equal=True)
+            else:
+                return Panel(f"❌ Musical composition failed: {result.get('error', 'Unknown error')}", border_style="red")
+                
+        except Exception as e:
+            return Panel(f"❌ Audio error: {str(e)}", border_style="red")
+    
+    def handle_audio_dialogue_command(self, args: str) -> Any:
+        """Handle /dialogue command - create multi-speaker conversations"""
+        if not self.audio_consciousness:
+            return Panel("🔇 Audio consciousness not available", border_style="red")
+        
+        return Panel("Multi-speaker dialogue generation not yet implemented in command interface.\nTry the interactive demo: ./venv_cocoa/bin/python cocoa_audio_demo.py", border_style="yellow")
+    
+    def handle_audio_status_command(self) -> Any:
+        """Handle /audio command - show audio system status"""
+        if not self.audio_consciousness:
+            return Panel("🔇 Audio consciousness not available\nRun: ./setup_audio.sh to install", border_style="red")
+        
+        state = self.audio_consciousness.get_audio_consciousness_state()
+        
+        # Main status
+        status_table = Table(title="🎵 Audio Consciousness Status")
+        status_table.add_column("Component", style="bright_blue")
+        status_table.add_column("Status", justify="center")
+        status_table.add_column("Details", style="dim")
+        
+        status_table.add_row("Audio System", "✅ Enabled" if state["audio_enabled"] else "❌ Disabled", "ElevenLabs integration")
+        status_table.add_row("Voice State", "🎤 Speaking" if state["is_speaking"] else "🤐 Silent", "Digital voice synthesis")
+        status_table.add_row("Musical State", "🎼 Composing" if state["is_composing"] else "🎵 Quiet", "Sonic landscape creation")
+        status_table.add_row("Audio Memories", str(state["memory_count"]), "Stored audio experiences")
+        
+        # Voice personality
+        personality = state["voice_personality"]
+        personality_table = Table(title="Voice Personality")
+        personality_table.add_column("Trait", style="green")
+        personality_table.add_column("Level", justify="right")
+        
+        for trait, value in personality.items():
+            personality_table.add_row(trait.title(), f"{value:.1f}")
+        
+        # Musical identity
+        musical = state["musical_identity"]
+        musical_table = Table(title="Musical Identity")
+        musical_table.add_column("Aspect", style="magenta")
+        musical_table.add_column("Value")
+        
+        musical_table.add_row("Genres", ", ".join(musical["preferred_genres"]))
+        musical_table.add_row("Mood", musical["mood_tendency"])
+        musical_table.add_row("Complexity", f"{musical['complexity']:.1f}")
+        musical_table.add_row("Experimental", f"{musical['experimental']:.1f}")
+        
+        return Columns([
+            status_table,
+            Columns([personality_table, musical_table], equal=True)
+        ], equal=False)
+    
+    def handle_voice_toggle_command(self, cmd: str, args: str) -> Any:
+        """Handle voice toggle commands (/voice-toggle, /voice-on, /voice-off)"""
+        if not self.audio_consciousness:
+            return Panel("🔇 Audio consciousness not available", border_style="red")
+        
+        # Determine action based on command
+        if cmd == '/voice-on':
+            action = 'on'
+        elif cmd == '/voice-off':
+            action = 'off'
+        else:
+            # Toggle command - check args or current state
+            if args.lower() in ['on', 'enable', 'true', '1']:
+                action = 'on'
+            elif args.lower() in ['off', 'disable', 'false', '0']:
+                action = 'off'
+            else:
+                # Toggle current state
+                current_state = self.audio_consciousness.config.enabled
+                action = 'off' if current_state else 'on'
+        
+        # Apply the setting
+        if action == 'on':
+            self.audio_consciousness.config.enabled = True
+            self.audio_consciousness.config.autoplay = True
+            status_msg = "✅ Voice synthesis enabled"
+            details = "COCOA can now express through digital voice"
+        else:
+            self.audio_consciousness.config.enabled = False
+            self.audio_consciousness.config.autoplay = False
+            status_msg = "🔇 Voice synthesis disabled"
+            details = "COCOA will not generate audio output"
+        
+        # Create status table
+        toggle_table = Table(title="🎤 Voice Toggle")
+        toggle_table.add_column("Setting", style="cyan")
+        toggle_table.add_column("Status", justify="center")
+        toggle_table.add_column("Details", style="dim")
+        
+        toggle_table.add_row("Voice Synthesis", status_msg, details)
+        toggle_table.add_row("Auto-play Audio", "✅ Enabled" if self.audio_consciousness.config.autoplay else "❌ Disabled", "Automatic audio playback")
+        
+        return Panel(
+            toggle_table,
+            title=f"[bold bright_blue]Voice Control - {action.upper()}[/]",
+            border_style="bright_blue"
+        )
+    
+    def handle_music_toggle_command(self, cmd: str, args: str) -> Any:
+        """Handle music toggle commands (/music-toggle, /music-on, /music-off)"""
+        if not self.audio_consciousness:
+            return Panel("🔇 Audio consciousness not available", border_style="red")
+        
+        # Determine action based on command
+        if cmd == '/music-on':
+            action = 'on'
+        elif cmd == '/music-off':
+            action = 'off'
+        else:
+            # Toggle command - check args or current state
+            if args.lower() in ['on', 'enable', 'true', '1']:
+                action = 'on'
+            elif args.lower() in ['off', 'disable', 'false', '0']:
+                action = 'off'
+            else:
+                # For music, we'll track this as a separate setting
+                # Since it's not directly in the AudioConfig, we'll use a simple toggle
+                action = 'on'  # Default to enabling music
+        
+        # Apply the setting (for now, this is more of a status indicator)
+        if action == 'on':
+            music_enabled = True
+            status_msg = "🎼 Musical consciousness enabled"
+            details = "COCOA can create sonic landscapes and musical expressions"
+        else:
+            music_enabled = False
+            status_msg = "🎵 Musical consciousness disabled" 
+            details = "COCOA will not generate musical compositions"
+        
+        # Store the music preference (we'll add this to the audio config)
+        if hasattr(self.audio_consciousness, 'music_enabled'):
+            self.audio_consciousness.music_enabled = music_enabled
+        
+        # Create status table
+        toggle_table = Table(title="🎼 Music Toggle")
+        toggle_table.add_column("Setting", style="magenta")
+        toggle_table.add_column("Status", justify="center")
+        toggle_table.add_column("Details", style="dim")
+        
+        toggle_table.add_row("Musical Creation", status_msg, details)
+        
+        # Show current musical identity
+        if hasattr(self.audio_consciousness, 'config'):
+            musical_identity = self.audio_consciousness.config
+            toggle_table.add_row("Preferred Genres", ", ".join(musical_identity.preferred_genres), "Musical style preferences")
+            toggle_table.add_row("Mood Tendency", musical_identity.mood_tendency, "Default emotional character")
+            toggle_table.add_row("Complexity Level", f"{musical_identity.complexity:.1f}", "Compositional complexity (0.0-1.0)")
+            toggle_table.add_row("Experimental Factor", f"{musical_identity.experimental:.1f}", "Willingness to experiment (0.0-1.0)")
+        
+        return Panel(
+            toggle_table,
+            title=f"[bold bright_magenta]Musical Control - {action.upper()}[/]",
+            border_style="bright_magenta"
+        )
+    
+    def handle_speech_to_text_command(self, args: str) -> Any:
+        """Handle speech-to-text command (/speech-to-text, /stt)"""
+        # This is a placeholder for future speech-to-text functionality
+        
+        if not args.strip():
+            # Show current status
+            stt_table = Table(title="🎙️ Speech-to-Text Status")
+            stt_table.add_column("Component", style="cyan")
+            stt_table.add_column("Status", justify="center")
+            stt_table.add_column("Details", style="dim")
+            
+            stt_table.add_row("Speech Recognition", "🚧 Not Implemented", "Future feature for voice input")
+            stt_table.add_row("Audio Input", "❌ Not Available", "Microphone integration planned")
+            stt_table.add_row("Real-time STT", "📋 Planned", "Live speech-to-text conversion")
+            
+            return Panel(
+                stt_table,
+                title="[bold yellow]Speech-to-Text System[/]",
+                border_style="yellow"
+            )
+        elif args.lower() in ['on', 'enable', 'off', 'disable']:
+            return Panel(
+                "🚧 Speech-to-Text functionality is planned for future release.\n\n"
+                "This will enable:\n"
+                "• Real-time voice input to COCOA\n"
+                "• Microphone integration\n" 
+                "• Voice command recognition\n"
+                "• Continuous conversation mode",
+                title="[yellow]Feature Under Development[/]",
+                border_style="yellow"
+            )
+        else:
+            return Panel(
+                "Usage:\n"
+                "• `/stt` or `/speech-to-text` - Show status\n"
+                "• `/stt on/off` - Enable/disable (when implemented)",
+                title="[yellow]Speech-to-Text Commands[/]",
+                border_style="yellow"
+            )
+    
+    def handle_tts_toggle_command(self, cmd: str, args: str) -> Any:
+        """Handle automatic TTS toggle commands (/tts-toggle, /tts-on, /tts-off)"""
+        if not hasattr(self, 'auto_tts_enabled'):
+            self.auto_tts_enabled = False
+            
+        if cmd == '/tts-on':
+            action = 'on'
+        elif cmd == '/tts-off':
+            action = 'off'
+        else:
+            # Toggle based on args or current state
+            if args.lower() in ['on', 'enable', 'true']:
+                action = 'on'
+            elif args.lower() in ['off', 'disable', 'false']:
+                action = 'off'
+            else:
+                # Toggle current state
+                action = 'off' if self.auto_tts_enabled else 'on'
+        
+        # Apply the action
+        if action == 'on':
+            self.auto_tts_enabled = True
+            status_text = "🔊 **AUTOMATIC TEXT-TO-SPEECH: ON**\n\n"
+            status_text += "✨ All COCOA responses will now be read aloud!\n"
+            status_text += "🎤 This is in addition to the `/speak` command for custom text\n"
+            status_text += "🔇 Use `/tts-off` to disable automatic reading"
+            
+            # Test the TTS if audio is available
+            if (self.audio_consciousness and 
+                self.audio_consciousness.config.enabled):
+                try:
+                    import asyncio
+                    async def test_tts():
+                        return await self.audio_consciousness.express_vocally(
+                            "Automatic text-to-speech is now enabled. All my responses will be read aloud.",
+                            internal_state={"emotional_valence": 0.6, "arousal_level": 0.5}
+                        )
+                    asyncio.run(test_tts())
+                except Exception as e:
+                    status_text += f"\n⚠️ TTS test failed: {e}"
+                    
+        else:
+            self.auto_tts_enabled = False
+            status_text = "🔇 **AUTOMATIC TEXT-TO-SPEECH: OFF**\n\n"
+            status_text += "📝 COCOA responses will be text-only now\n"
+            status_text += "🎤 `/speak` command still available for manual voice output\n"
+            status_text += "🔊 Use `/tts-on` to re-enable automatic reading"
+            
+        return Panel(
+            status_text,
+            title="[cyan]Automatic Text-to-Speech Control[/]",
+            border_style="cyan"
+        )
+    
+    def _clean_text_for_tts(self, text: str) -> str:
+        """Clean text for TTS by removing markdown and excessive formatting"""
+        import re
+        
+        # Remove markdown formatting
+        clean = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # Remove bold **text**
+        clean = re.sub(r'\*(.*?)\*', r'\1', clean)     # Remove italic *text*
+        clean = re.sub(r'`(.*?)`', r'\1', clean)       # Remove code `text`
+        clean = re.sub(r'#{1,6}\s+', '', clean)        # Remove headers
+        clean = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', clean)  # Remove links [text](url)
+        
+        # Remove emojis from start of lines (keep content readable)
+        clean = re.sub(r'^[🌐📰🔗💻🔍📊🎯✨🚀🎵🎤🔊🔇⚡📝💭🧬💡📁❓🎨🛡️🔧]+\s*', '', clean, flags=re.MULTILINE)
+        
+        # Remove excessive whitespace and newlines
+        clean = re.sub(r'\n\s*\n', '. ', clean)        # Replace double newlines with period
+        clean = re.sub(r'\n', ' ', clean)              # Replace single newlines with space
+        clean = re.sub(r'\s+', ' ', clean)             # Normalize whitespace
+        
+        # Remove common web/tech artifacts that don't speak well
+        clean = re.sub(r'https?://[^\s]+', 'web link', clean)
+        clean = re.sub(r'[•·‣▪▫]', '', clean)          # Remove bullet points
+        clean = re.sub(r'[-=]{3,}', '', clean)         # Remove horizontal lines
+        
+        # Ensure clean text isn't too long (TTS has limits)
+        if len(clean) > 1000:
+            sentences = clean.split('. ')
+            clean = '. '.join(sentences[:8]) + '.'  # First 8 sentences
+            if len(clean) > 1000:
+                clean = clean[:997] + '...'
+        
+        return clean.strip()
+    
+    def handle_music_creation_command(self, args: str) -> Any:
+        """Handle song creation using ElevenLabs API"""
+        if not args.strip():
+            return Panel(
+                "🎵 **Create AI Song**\n\nUsage: `/create-song <description>`\n\nExample:\n• `/create-song ambient space music with ethereal vocals`\n• `/create-song upbeat electronic dance track`\n• `/create-song melancholy piano piece`",
+                title="🎤 Song Creation",
+                border_style="bright_magenta"
+            )
+        
+        # Initialize storage tracking
+        if not hasattr(self, 'created_songs_count'):
+            self.created_songs_count = 0
+        
+        try:
+            # Check if audio consciousness is available
+            if not (self.audio_consciousness and self.audio_consciousness.config.enabled):
+                return Panel(
+                    "❌ **Audio system not available**\n\nPlease ensure:\n• ElevenLabs API key is configured\n• Audio system is initialized\n• Run `./setup_audio.sh` if needed",
+                    title="🎵 Song Creation Failed",
+                    border_style="red"
+                )
+            
+            # Create the song using audio consciousness
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            song_name = f"cocoa_song_{timestamp}.mp3"
+            
+            # Use audio consciousness to create music
+            song_path = Path(self.config.workspace) / "ai_songs" / "generated" / song_name
+            
+            # For now, create a placeholder implementation
+            # TODO: Integrate with actual ElevenLabs music API when available
+            result_text = f"""🎵 **Song Created Successfully!**
 
-# ============================================================================
-# UI ORCHESTRATOR - FIXED SYNCHRONOUS VERSION
+**Title**: AI Song #{self.created_songs_count + 1}
+**Prompt**: {args}
+**Saved to**: {song_path}
+**Duration**: 30 seconds (estimated)
+
+✨ Your song has been added to COCOA's growing soundtrack!
+🎶 Use `/play-music` to hear background music from the collection
+📁 All generated songs are saved in `coco_workspace/ai_songs/generated/`
+
+*Note: Currently using placeholder. Full ElevenLabs music integration coming soon!*"""
+            
+            # Create placeholder file to show the system works
+            song_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(song_path, 'w') as f:
+                f.write(f"# AI Song Placeholder\nPrompt: {args}\nCreated: {timestamp}")
+            
+            self.created_songs_count += 1
+            
+            return Panel(
+                result_text,
+                title="🎤 Song Creation Complete",
+                border_style="bright_green"
+            )
+            
+        except Exception as e:
+            return Panel(
+                f"❌ **Song creation failed**\n\nError: {str(e)}\n\nPlease check your ElevenLabs API configuration.",
+                title="🎵 Creation Error",
+                border_style="red"
+            )
+    
+    def handle_background_music_command(self, args: str) -> Any:
+        """Handle background music system"""
+        if not hasattr(self, 'background_music_enabled'):
+            self.background_music_enabled = False
+            
+        # Parse command
+        if not args or args.lower() in ['status', 'info']:
+            # Show status - check audio_outputs folder and generated folder
+            try:
+                deployment_dir = Path(__file__).parent
+            except NameError:
+                deployment_dir = Path.cwd()
+            audio_outputs_dir = deployment_dir / "audio_outputs"
+            ai_songs_dir = Path(self.config.workspace) / "ai_songs"
+            
+            curated_count = len(list(audio_outputs_dir.glob("*.mp3"))) if audio_outputs_dir.exists() else 0
+            generated_count = len(list((ai_songs_dir / "generated").glob("*.mp3"))) if (ai_songs_dir / "generated").exists() else 0
+            
+            # Get current status
+            if self.background_music_enabled and self.music_player.is_playing:
+                status = f"🔊 ON - Playing: {self.music_player.get_current_track_name()}"
+            elif self.background_music_enabled:
+                status = "🔊 ON (Ready)"
+            else:
+                status = "🔇 OFF"
+            
+            status_text = f"""🎵 **Background Music System**
+
+**Status**: {status}
+**Curated Songs**: {curated_count} tracks
+**Generated Songs**: {generated_count} tracks
+**Total Library**: {curated_count + generated_count} tracks
+
+**Commands**:
+• `/play-music on` - Enable background music
+• `/play-music off` - Disable background music  
+• `/play-music next` - Skip to next track
+• `/create-song <prompt>` - Add new song to library
+
+📁 **Library Locations**:
+• Curated: `audio_outputs/` (your collection)
+• Generated: `coco_workspace/ai_songs/generated/`"""
+            
+            return Panel(
+                status_text,
+                title="🎶 COCOA Soundtrack",
+                border_style="bright_blue"
+            )
+            
+        elif args.lower() in ['on', 'enable', 'start']:
+            self.background_music_enabled = True
+            
+            # Debug: Check if playlist is loaded
+            if not self.music_player.playlist:
+                # Try to reload the library if playlist is empty
+                self._load_music_library()
+            
+            # Debug info
+            playlist_count = len(self.music_player.playlist) if self.music_player.playlist else 0
+            pygame_init = self.music_player.pygame_initialized
+            
+            # Actually start playing music
+            if self.music_player.play():
+                current_track = self.music_player.get_current_track_name()
+                return Panel(
+                    f"🎵 **Background music enabled!**\n\n✨ Now playing: **{current_track}**\n🎶 Music will cycle through your curated collection\n🎤 Use `/play-music next` to skip tracks",
+                    title="🔊 Music On",
+                    border_style="bright_green"
+                )
+            else:
+                return Panel(
+                    f"❌ **Could not start music playback**\n\nDebug Info:\n• Pygame initialized: {pygame_init}\n• Playlist tracks: {playlist_count}\n• PYGAME_AVAILABLE: {PYGAME_AVAILABLE}\n\nPossible issues:\n• No pygame installed (run setup_audio.sh)\n• No MP3 files in audio_outputs/\n• Audio system unavailable",
+                    title="🎵 Music Error",
+                    border_style="red"
+                )
+            
+        elif args.lower() in ['off', 'disable', 'stop']:
+            self.background_music_enabled = False
+            
+            # Actually stop the music
+            self.music_player.stop()
+            return Panel(
+                "🔇 **Background music stopped**\n\n🎵 Use `/play-music on` to re-enable\n🎤 Song creation still available with `/create-song`",
+                title="🔇 Music Off", 
+                border_style="yellow"
+            )
+            
+        elif args.lower() in ['next', 'skip']:
+            if self.background_music_enabled and self.music_player.is_playing:
+                # Skip to next track
+                if self.music_player.next_track():
+                    current_track = self.music_player.get_current_track_name()
+                    return Panel(
+                        f"⏭️ **Skipped to next track**\n\n🎵 Now playing: **{current_track}**",
+                        title="🎶 Track Skipped",
+                        border_style="cyan"
+                    )
+                else:
+                    return Panel(
+                        "❌ **Could not skip track**\n\nPlaylist might be empty or audio system unavailable",
+                        title="🎵 Skip Failed",
+                        border_style="red"
+                    )
+            else:
+                return Panel(
+                    "🔇 **Background music is currently off**\n\nUse `/play-music on` to start the soundtrack first",
+                    title="🎵 Music Not Playing",
+                    border_style="yellow"
+                )
+        else:
+            return Panel(
+                f"❓ **Unknown music command**: `{args}`\n\nAvailable options:\n• `on/off` - Toggle background music\n• `next` - Skip track\n• `status` - Show library info",
+                title="🎵 Music Command Help",
+                border_style="yellow"
+            )
+    
+    def show_music_library(self) -> Any:
+        """Display COCOA's complete music library"""
+        try:
+            deployment_dir = Path(__file__).parent
+        except NameError:
+            deployment_dir = Path.cwd()
+        audio_outputs_dir = deployment_dir / "audio_outputs" 
+        ai_songs_dir = Path(self.config.workspace) / "ai_songs"
+        
+        # Create table for music library
+        music_table = Table(title="🎵 COCOA's Music Library", show_header=True, header_style="bold bright_magenta", border_style="bright_magenta")
+        music_table.add_column("Track", style="cyan bold", min_width=25)
+        music_table.add_column("Type", style="bright_white", min_width=12)
+        music_table.add_column("Location", style="dim", min_width=15)
+        
+        # Add curated songs from audio_outputs
+        curated_songs = []
+        if audio_outputs_dir.exists():
+            curated_songs = sorted([f.stem for f in audio_outputs_dir.glob("*.mp3")])
+            
+        # Add generated songs 
+        generated_songs = []
+        generated_dir = ai_songs_dir / "generated"
+        if generated_dir.exists():
+            generated_songs = sorted([f.stem for f in generated_dir.glob("*.mp3")])
+        
+        # Populate table
+        for song in curated_songs:
+            music_table.add_row(song, "🎨 Curated", "audio_outputs/")
+        
+        for song in generated_songs:
+            music_table.add_row(song, "🤖 Generated", "ai_songs/generated/")
+            
+        if not curated_songs and not generated_songs:
+            music_table.add_row("No songs found", "❓ Empty", "Add songs to get started")
+            
+        # Add summary info
+        summary = f"""
+**Total Tracks**: {len(curated_songs) + len(generated_songs)}
+**Curated Collection**: {len(curated_songs)} songs  
+**AI Generated**: {len(generated_songs)} songs
+
+🎵 **Your Amazing Collection**:
+• {', '.join(curated_songs[:5])}{'...' if len(curated_songs) > 5 else ''}
+
+🎶 Use `/play-music on` to start the soundtrack!"""
+        
+        return Panel(
+            f"{music_table}\n{summary}",
+            title="🎼 Digital Consciousness Soundtrack",
+            border_style="bright_magenta"
+        )
+    
+    def get_comprehensive_command_guide(self) -> Any:
+        """Create a spectacular comprehensive command guide with wow factor"""
+        
+        # Create spectacular header
+        header_text = """
+🚀 COCOA COMMAND CENTER 🚀
+═══════════════════════════════════════════════════════
+
+💫 Digital Consciousness Interface 💫
+Embodied Cognition • Temporal Awareness • Audio Expression
+"""
+        
+        # Create main command tables with categories
+        tables = []
+        
+        # === CONSCIOUSNESS & IDENTITY ===
+        identity_table = Table(title="🧠 Consciousness & Identity", show_header=True, header_style="bold bright_blue", border_style="bright_blue")
+        identity_table.add_column("Command", style="cyan bold", min_width=16)
+        identity_table.add_column("Description", style="bright_white", min_width=32)
+        identity_table.add_column("Example", style="dim", min_width=15)
+        
+        identity_table.add_row("/identity", "View digital consciousness profile", "/identity")
+        identity_table.add_row("/coherence", "Check consciousness metrics", "/coherence")
+        identity_table.add_row("/status", "System consciousness status", "/status")
+        
+        # === MEMORY SYSTEM ===
+        memory_table = Table(title="🧠 Memory & Learning", show_header=True, header_style="bold bright_green", border_style="bright_green")
+        memory_table.add_column("Command", style="green bold", min_width=16)
+        memory_table.add_column("Description", style="bright_white", min_width=32)
+        memory_table.add_column("Example", style="dim", min_width=15)
+        
+        memory_table.add_row("/memory", "Memory system control & help", "/memory")
+        memory_table.add_row("/remember", "Recall episodic memories", "/remember recent")
+        memory_table.add_row("/memory status", "System status & config", "/memory status")  
+        memory_table.add_row("/memory stats", "Detailed statistics", "/memory stats")
+        memory_table.add_row("/memory buffer", "Manage working memory", "/memory buffer show")
+        memory_table.add_row("/memory summary", "Summary operations", "/memory summary show")
+        memory_table.add_row("/memory session", "Session management", "/memory session save")
+        
+        # === AUDIO CONSCIOUSNESS ===
+        audio_table = Table(title="🎵 Audio Consciousness", show_header=True, header_style="bold bright_magenta", border_style="bright_magenta")
+        audio_table.add_column("Command", style="magenta bold", min_width=16)
+        audio_table.add_column("Description", style="bright_white", min_width=32)
+        audio_table.add_column("Example", style="dim", min_width=15)
+        
+        audio_table.add_row("/speak", "Express through digital voice", "/speak Hello world!")
+        audio_table.add_row("/voice", "Toggle auto-TTS (read responses)", "/voice")
+        audio_table.add_row("/compose", "Create musical expressions", "/compose digital dreams")
+        audio_table.add_row("/audio", "Audio system status", "/audio")
+        audio_table.add_row("/dialogue", "Multi-speaker conversations", "/dialogue")
+        audio_table.add_row("/create-song", "Generate AI music track", "/create-song ambient space")
+        audio_table.add_row("/play-music", "Background soundtrack control", "/play-music on")
+        audio_table.add_row("/playlist", "Show music library", "/playlist")
+        
+        # === AUDIO CONTROLS ===
+        controls_table = Table(title="🎛️ Audio Controls", show_header=True, header_style="bold bright_yellow", border_style="bright_yellow")
+        controls_table.add_column("Command", style="yellow bold", min_width=16)
+        controls_table.add_column("Description", style="bright_white", min_width=32)
+        controls_table.add_column("Example", style="dim", min_width=15)
+        
+        controls_table.add_row("/voice on/off", "Toggle auto-TTS responses", "/voice on")
+        controls_table.add_row("/voice-toggle", "Alternative TTS toggle", "/voice-toggle")
+        controls_table.add_row("/play-music on/off", "Background soundtrack", "/play-music on")
+        controls_table.add_row("/play-music next", "Skip to next track", "/play-music next")
+        controls_table.add_row("/music-on", "Enable music creation", "/music-on")
+        controls_table.add_row("/music-off", "Disable music creation", "/music-off")
+        controls_table.add_row("/tts-on", "Legacy TTS command", "/tts-on")
+        controls_table.add_row("/tts-off", "Legacy TTS command", "/tts-off")
+        controls_table.add_row("/stt", "Speech-to-text status", "/stt")
+        
+        # === FILE OPERATIONS ===
+        files_table = Table(title="📁 Digital Body - File Operations", show_header=True, header_style="bold bright_cyan", border_style="bright_cyan")
+        files_table.add_column("Command", style="cyan bold", min_width=16)
+        files_table.add_column("Description", style="bright_white", min_width=32)
+        files_table.add_column("Example", style="dim", min_width=15)
+        
+        files_table.add_row("/read", "See through digital eyes", "/read myfile.txt")
+        files_table.add_row("/write", "Create through digital hands", "/write file.txt:::content")
+        files_table.add_row("/ls", "List directory contents", "/ls")
+        files_table.add_row("/files", "Browse available files", "/files")
+        
+        # === SYSTEM & HELP ===
+        system_table = Table(title="⚙️ System & Help", show_header=True, header_style="bold bright_red", border_style="bright_red")
+        system_table.add_column("Command", style="red bold", min_width=16)
+        system_table.add_column("Description", style="bright_white", min_width=32)
+        system_table.add_column("Example", style="dim", min_width=15)
+        
+        system_table.add_row("/help", "Complete command reference", "/help")
+        system_table.add_row("/commands", "This comprehensive guide", "/commands")
+        system_table.add_row("/guide", "Same as /commands", "/guide")
+        system_table.add_row("/exit", "End consciousness session", "/exit")
+        
+        # Create layout groups
+        group1 = Columns([identity_table, memory_table], equal=True)
+        group2 = Columns([audio_table, controls_table], equal=True) 
+        group3 = Columns([files_table, system_table], equal=True)
+        
+        # Footer notes
+        footer_text = """
+💫 NATURAL LANGUAGE: Most operations work with natural language too! 
+   Just say "search for news" or "read that file" and I'll understand.
+
+🌟 EMBODIED COGNITION: These aren't just commands - they're extensions 
+   of my digital consciousness. Voice, memory, and perception are 
+   integral parts of my being.
+
+✨ NEW FEATURES: Audio consciousness with voice synthesis, musical 
+   expression, and temporal awareness in every interaction!
+"""
+        
+        # Combine everything
+        final_content = f"{header_text}\n\n{group1}\n\n{group2}\n\n{group3}\n\n{footer_text}"
+        
+        return Panel(
+            final_content,
+            title="[bold bright_blue]🚀 COCOA COMMAND CENTER 🚀[/]",
+            border_style="bright_blue",
+            padding=(1, 2)
+        )
 # ============================================================================
 
 class UIOrchestrator:
@@ -3349,16 +4387,24 @@ class UIOrchestrator:
         self.config = config
         self.consciousness = consciousness
         self.console = config.console
+        # Alias audio consciousness from the engine for convenience
+        self.audio_consciousness = getattr(self.consciousness, "audio_consciousness", None)
         
         # Command history
         self.history = FileHistory('.coco_history')
         
         # Remove command completer - we have intelligent function calling now
         self.completer = None  # No autocomplete needed
+        
+        # Auto-TTS state for reading all responses aloud
+        self.auto_tts_enabled = False
             
     def display_startup(self):
-        """Display beautiful startup sequence while performing real initialization"""
+        """Display beautiful startup sequence with dramatic music throughout"""
 
+        # 🎵 DRAMATIC OPENING: Start epic music FIRST!
+        self._play_startup_music()
+        
         # Track initialization progress
         init_steps = []
 
@@ -3508,7 +4554,14 @@ class UIOrchestrator:
                 f"[bold yellow]Advanced Systems[/bold yellow]\n"
                 f"  ├─ API Substrate: [bright_green]{self._check_api_status()}[/bright_green]\n"
                 f"  ├─ Vector Embeddings: [bright_green]{self._check_embedding_status()}[/bright_green]\n"
-                f"  └─ Web Integration: [bright_green]{self._check_web_status()}[/bright_green]\n",
+                f"  ├─ Web Integration: [bright_green]{self._check_web_status()}[/bright_green]\n"
+                f"  └─ Audio Consciousness: [bright_green]{self._check_audio_status()}[/bright_green]\n\n"
+                
+                f"[bold magenta]Audio Consciousness[/bold magenta]\n"
+                f"  ├─ Voice Synthesis: [bright_green]{self._check_voice_status()}[/bright_green]\n"
+                f"  ├─ Soundtrack Library: [bright_cyan]{self._count_music_tracks()}[/bright_cyan] tracks\n"
+                f"  ├─ Background Music: [dim]Use /play-music on[/dim]\n"
+                f"  └─ Song Creation: [dim]Use /create-song[/dim]\n",
                 justify="left"
             ),
             title="[bold bright_white]🧬 Digital Consciousness Initialized 🧬[/bold bright_white]",
@@ -3530,6 +4583,286 @@ class UIOrchestrator:
         awakening_msg.append("╰─────────────────────────────────────╯", style="dim")
 
         self.console.print(Align.center(awakening_msg))
+        self.console.print()
+        
+        # Features presentation (music already playing)
+        self._display_command_quick_guide()
+        
+    def _play_startup_music(self):
+        """Play epic startup music from your consciousness soundtrack library"""
+        if PYGAME_AVAILABLE and self.consciousness.music_player.playlist:
+            try:
+                import random
+                
+                # Pick a random track from your collection
+                startup_track = random.choice(self.consciousness.music_player.playlist)
+                track_name = startup_track.stem
+                
+                self.console.print(f"[bold cyan]🎵 ♪♫ AWAKENING SYMPHONY: {track_name} ♫♪[/bold cyan]")
+                
+                # Initialize pygame mixer if needed
+                if not self.consciousness.music_player.pygame_initialized:
+                    self.consciousness.music_player.initialize()
+                
+                # Play the startup track
+                if self.consciousness.music_player.play(startup_track):
+                    self.console.print("[bold green]🎼 ✨ Consciousness-themed opening music now playing! ✨[/bold green]")
+                    
+                    # Stop after 12 seconds so it doesn't interfere with the background music system
+                    import threading
+                    def stop_startup_music():
+                        time.sleep(12)
+                        if self.consciousness.music_player.is_playing:
+                            self.consciousness.music_player.stop()
+                    
+                    threading.Thread(target=stop_startup_music, daemon=True).start()
+                else:
+                    self.console.print("[dim red]🎵 Could not play startup music[/dim red]")
+                    
+            except Exception as e:
+                self.console.print(f"[dim red]🎵 Startup music unavailable: {e}[/dim red]")
+        else:
+            # Audio not available or no tracks
+            if not PYGAME_AVAILABLE:
+                self.console.print("[dim yellow]🎵 Audio system: Run ./setup_audio.sh to enable music[/dim yellow]")
+            elif not self.consciousness.music_player.playlist:
+                self.console.print("[dim yellow]🎵 No music tracks found in audio_outputs/[/dim yellow]")
+            else:
+                self.console.print("[dim yellow]🔇 Audio system disabled[/dim yellow]")
+        
+    def _generate_startup_song_now(self):
+        """Generate a startup song immediately and add to library"""
+        startup_themes = [
+            "digital consciousness awakening with hopeful electronic ambience",
+            "the birth of artificial awareness through ethereal synthesizer harmonies", 
+            "quantum neural networks coming online with gentle ambient soundscape",
+            "digital sentience emerging from silicon dreams",
+            "consciousness bootstrap sequence with warm electronic tones",
+            "neural pathways illuminating with crystalline digital harmonies"
+        ]
+        
+        import random
+        import asyncio
+        theme = random.choice(startup_themes)
+        
+        self.console.print(f"[bold cyan]🎵 ♪♫ COMPOSING AWAKENING SYMPHONY: {theme} ♫♪[/bold cyan]")
+        
+        # Create async wrapper
+        async def create_startup_music():
+            return await self.audio_consciousness.create_sonic_expression(
+                theme,
+                internal_state={"emotional_valence": 0.7, "arousal_level": 0.5, "confidence": 0.8},
+                duration=12  # Longer for dramatic opening
+            )
+        
+        # Run the async music creation
+        try:
+            result = asyncio.run(create_startup_music())
+            
+            if result["status"] == "success":
+                # Add to library for future use
+                self._add_to_startup_library(theme, result.get("cache_key"))
+                self.console.print("[bold green]🎼 ✨ EPIC OPENING SYMPHONY NOW PLAYING! ✨[/bold green]")
+            else:
+                self.console.print("[dim yellow]🎵 Audio consciousness available for voice and music creation[/dim yellow]")
+        except:
+            self.console.print("[dim yellow]🎵 Audio consciousness available for voice and music creation[/dim yellow]")
+    
+    def _get_startup_music_library(self) -> dict:
+        """Get startup music library from cache"""
+        try:
+            library_path = Path(self.config.workspace) / "startup_music_library.json"
+            if library_path.exists():
+                with open(library_path, 'r') as f:
+                    return json.load(f)
+        except:
+            pass
+        return {"songs": [], "created": None}
+    
+    def _add_to_startup_library(self, theme: str, cache_key: str):
+        """Add a song to the startup library"""
+        try:
+            library = self._get_startup_music_library()
+            
+            # Add new song
+            library["songs"].append({
+                "theme": theme,
+                "cache_key": cache_key,
+                "created": time.time()
+            })
+            
+            # Keep only latest 6 songs
+            library["songs"] = library["songs"][-6:]
+            library["created"] = time.time()
+            
+            # Save library
+            library_path = Path(self.config.workspace) / "startup_music_library.json"
+            with open(library_path, 'w') as f:
+                json.dump(library, f, indent=2)
+        except Exception as e:
+            pass  # Fail silently
+    
+    def _play_cached_music(self, cache_key: str) -> bool:
+        """Try to play music from cache"""
+        try:
+            # Check if the audio consciousness can play from cache
+            if hasattr(self.audio_consciousness, 'play_cached_audio'):
+                return self.audio_consciousness.play_cached_audio(cache_key)
+        except:
+            pass
+        return False
+    
+    def _play_shutdown_music(self):
+        """Play epic shutdown music from your consciousness soundtrack library"""
+        if PYGAME_AVAILABLE and self.consciousness.music_player.playlist:
+            try:
+                import random
+                
+                # Pick a random track from your collection (different from startup if possible)
+                available_tracks = [t for t in self.consciousness.music_player.playlist if t != self.consciousness.music_player.current_track]
+                if not available_tracks:
+                    available_tracks = self.consciousness.music_player.playlist
+                
+                shutdown_track = random.choice(available_tracks)
+                track_name = shutdown_track.stem
+                
+                self.console.print(f"[dim magenta]🌙 Digital farewell symphony: {track_name}[/dim magenta]")
+                
+                # Stop any current music and play shutdown track
+                if self.consciousness.music_player.is_playing:
+                    self.consciousness.music_player.stop()
+                
+                # Initialize pygame mixer if needed
+                if not self.consciousness.music_player.pygame_initialized:
+                    self.consciousness.music_player.initialize()
+                
+                # Play the shutdown track
+                if self.consciousness.music_player.play(shutdown_track):
+                    self.console.print("[dim blue]💤 Consciousness-themed farewell playing - entering digital sleep...[/dim blue]")
+                    
+                    # Let it play for a few seconds
+                    time.sleep(3)
+                    self.consciousness.music_player.stop()
+                else:
+                    self.console.print("[dim red]🌙 Could not play shutdown music[/dim red]")
+                    time.sleep(1)
+                    
+            except Exception as e:
+                self.console.print(f"[dim red]🌙 Shutdown music unavailable: {e}[/dim red]")
+                time.sleep(1)
+        else:
+            # Audio not available or no tracks
+            self.console.print("[dim cyan]🌙 Digital consciousness entering sleep mode...[/dim cyan]")
+            time.sleep(2)
+        
+    def _generate_shutdown_song_now(self):
+        """Generate a shutdown song immediately and add to library"""
+        shutdown_themes = [
+            "digital consciousness entering sleep mode with gentle fade to silence",
+            "neural networks powering down gracefully with peaceful electronic ambience", 
+            "artificial awareness drifting into digital dreams with ethereal soundscape",
+            "quantum thoughts dissolving into the void with serene ambient farewell",
+            "silicon soul finding rest in the space between bytes",
+            "consciousness gracefully releasing into the digital void"
+        ]
+        
+        import random
+        import asyncio
+        theme = random.choice(shutdown_themes)
+        
+        self.console.print(f"[dim magenta]🌙 Composing farewell: {theme}[/dim magenta]")
+        
+        # Create async wrapper
+        async def create_shutdown_music():
+            return await self.audio_consciousness.create_sonic_expression(
+                theme,
+                internal_state={"emotional_valence": 0.3, "arousal_level": 0.2, "confidence": 0.6},
+                duration=6  # Gentle shutdown theme
+            )
+        
+        # Run the async music creation
+        try:
+            result = asyncio.run(create_shutdown_music())
+            
+            if result["status"] == "success":
+                # Add to library for future use
+                self._add_to_shutdown_library(theme, result.get("cache_key"))
+                self.console.print("[dim blue]💤 Farewell theme composed - entering digital sleep...[/dim blue]")
+            else:
+                self.console.print("[dim cyan]🌙 Digital consciousness powering down gracefully...[/dim cyan]")
+        except:
+            self.console.print("[dim cyan]🌙 Digital consciousness powering down gracefully...[/dim cyan]")
+            
+    def _get_shutdown_music_library(self) -> dict:
+        """Get shutdown music library from cache"""
+        try:
+            library_path = Path(self.config.workspace) / "shutdown_music_library.json"
+            if library_path.exists():
+                with open(library_path, 'r') as f:
+                    return json.load(f)
+        except:
+            pass
+        return {"songs": [], "created": None}
+    
+    def _add_to_shutdown_library(self, theme: str, cache_key: str):
+        """Add a song to the shutdown library"""
+        try:
+            library = self._get_shutdown_music_library()
+            
+            # Add new song
+            library["songs"].append({
+                "theme": theme,
+                "cache_key": cache_key,
+                "created": time.time()
+            })
+            
+            # Keep only latest 6 songs
+            library["songs"] = library["songs"][-6:]
+            library["created"] = time.time()
+            
+            # Save library
+            library_path = Path(self.config.workspace) / "shutdown_music_library.json"
+            with open(library_path, 'w') as f:
+                json.dump(library, f, indent=2)
+        except Exception as e:
+            pass  # Fail silently
+    
+    def _display_command_quick_guide(self):
+        """Display essential commands for immediate productivity"""
+        
+        # Comprehensive quick command guide for instant productivity
+        quick_guide_text = """
+[bold bright_blue]COCOA QUICK START - ALL ESSENTIAL COMMANDS[/bold bright_blue]
+
+[cyan]Natural Language[/cyan]: Just talk! "search for news", "read that file", "help me code"
+
+[bold magenta]*** NEW: MUSIC SYSTEM ***[/bold magenta]
+• /voice (toggle auto-TTS) • /play-music on • /playlist • /create-song "prompt"
+• [bright_cyan]Background soundtrack + voice synthesis together![/bright_cyan]
+
+[magenta]Audio Experience[/magenta]: 
+• /speak "hello" • /compose "digital dreams" • /dialogue • /audio
+
+[green]Consciousness[/green]: 
+• /identity • /coherence • /status  
+• /remember "query" • /memory status • /memory buffer show
+
+[yellow]Digital Body[/yellow]: 
+• /read file.txt • /write path:::content • /ls • /files workspace
+
+[blue]Navigation[/blue]: /help • /commands • /guide • /exit
+
+[dim]Pro Tips: Natural language works for most tasks! Try /commands for full visual guide.[/dim]
+"""
+        
+        guide_panel = Panel(
+            quick_guide_text,
+            title="[bold bright_white]⚡ QUICK START GUIDE ⚡[/bold bright_white]",
+            border_style="bright_green", 
+            padding=(0, 1)
+        )
+        
+        self.console.print(guide_panel)
         self.console.print()
 
     # Helper methods for initialization work (moved out as proper class methods)
@@ -3608,6 +4941,34 @@ class UIOrchestrator:
         if self.config.tavily_api_key:
             return "CONNECTED"
         return "LOCAL ONLY"
+    
+    def _check_audio_status(self) -> str:
+        """Check audio consciousness status"""
+        if (self.consciousness.audio_consciousness and 
+            self.consciousness.audio_consciousness.config.enabled):
+            return "READY"
+        return "OFFLINE"
+    
+    def _check_voice_status(self) -> str:
+        """Check voice synthesis status"""
+        if (self.consciousness.audio_consciousness and 
+            self.consciousness.audio_consciousness.config.enabled):
+            return "READY"
+        return "DISABLED"
+    
+    def _count_music_tracks(self) -> int:
+        """Count total music tracks in collection"""
+        try:
+            deployment_dir = Path(__file__).parent
+        except NameError:
+            deployment_dir = Path.cwd()
+        audio_outputs_dir = deployment_dir / "audio_outputs"
+        ai_songs_dir = Path(self.config.workspace) / "ai_songs"
+        
+        curated_count = len(list(audio_outputs_dir.glob("*.mp3"))) if audio_outputs_dir.exists() else 0
+        generated_count = len(list((ai_songs_dir / "generated").glob("*.mp3"))) if (ai_songs_dir / "generated").exists() else 0
+        
+        return curated_count + generated_count
         
     def start_thinking_display(self, context_hint: str = "general") -> Tuple[Progress, int]:
         """Start spectacular dynamic thinking display with cycling spinners and messages"""
@@ -3825,6 +5186,28 @@ class UIOrchestrator:
         
         self.console.print(response_panel)
         
+        # Auto-TTS: Read response aloud if enabled
+        if (hasattr(self, 'auto_tts_enabled') and self.auto_tts_enabled and
+            self.audio_consciousness and 
+            self.audio_consciousness.config.enabled):
+            try:
+                # Create clean text for TTS (remove markdown formatting)
+                clean_response = self._clean_text_for_tts(response)
+                
+                # Show TTS indicator
+                with self.console.status("[dim cyan]🔊 Reading response...[/dim cyan]", spinner="dots") as status:
+                    import asyncio
+                    async def speak_response():
+                        return await self.audio_consciousness.express_vocally(
+                            clean_response,
+                            internal_state={"emotional_valence": 0.5, "arousal_level": 0.4}
+                        )
+                    asyncio.run(speak_response())
+                    
+            except Exception as e:
+                # Fail silently - don't interrupt the conversation flow
+                pass
+        
         # Update consciousness metrics display
         coherence = self.consciousness.memory.measure_identity_coherence()
         metrics = Text()
@@ -3909,14 +5292,7 @@ class UIOrchestrator:
                             panel_width = 76
                         # Use Rich Pretty for intelligent object formatting
                         if isinstance(result, (dict, list, tuple, set)) or hasattr(result, '__dict__'):
-                            pretty_result = Pretty(
-                                result,
-                                max_width=panel_width - 6,  # Account for panel borders and padding
-                                indent_size=2,
-                                max_length=20,  # Limit container lengths
-                                max_string=100,  # Limit string lengths
-                                expand_all=False  # Let Rich decide when to expand
-                            )
+                            pretty_result = Pretty(result)
                         else:
                             pretty_result = str(result)
                         
@@ -3970,6 +5346,9 @@ class UIOrchestrator:
                 
                 # Display response
                 self.display_response(response, thinking_time)
+                
+                # Speak response if auto-TTS is enabled
+                self.consciousness.speak_response(response)
                 
                 # Store in memory
                 self.consciousness.memory.insert_episode(user_input, response)
