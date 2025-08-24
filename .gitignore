@@ -50,6 +50,14 @@ coco_workspace/
 *.tmp
 temp_*
 
+# Audio files (too large for git)
+audio_outputs/
+*.mp3
+*.wav
+*.m4a
+*.aac
+~/.cocoa/audio_cache/
+
 # IDE and editor files
 .vscode/
 .idea/
