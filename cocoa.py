@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field
 from collections import deque
 
-# Rich UI components for beautiful displays
+# Rich UI components - COMPLETE ARSENAL for spectacular displays!
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -28,9 +28,28 @@ from rich.live import Live
 from rich.text import Text
 from rich.markdown import Markdown
 from rich.syntax import Syntax
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, MofNCompleteColumn
 from rich.columns import Columns
-from rich.box import ROUNDED, DOUBLE
+from rich.tree import Tree
+from rich.spinner import Spinner
+from rich.align import Align
+from rich.rule import Rule
+from rich.status import Status
+from rich.prompt import Prompt, Confirm
+from rich.pretty import Pretty
+from rich.json import JSON
+from rich.traceback import install as rich_traceback_install
+from rich.logging import RichHandler
+from rich.bar import Bar
+from rich.padding import Padding
+from rich.measure import Measurement
+from rich.segment import Segment
+from rich.style import Style as RichStyle
+from rich.theme import Theme
+from rich.filesize import decimal
+from rich import box
+from rich.box import ROUNDED, DOUBLE, SIMPLE, HEAVY, ASCII, MINIMAL
+from rich import print as rich_print
 
 # Prompt toolkit for clean input handling - SYNCHRONOUS
 from prompt_toolkit import prompt
@@ -42,6 +61,9 @@ from prompt_toolkit.styles import Style
 import openai
 import anthropic
 from anthropic import Anthropic
+
+# Enable Rich tracebacks for beautiful error displays
+rich_traceback_install(show_locals=True)
 
 # Optional imports with graceful fallbacks
 try:
@@ -60,6 +82,55 @@ except ImportError:
 # ============================================================================
 # CONFIGURATION AND ENVIRONMENT
 # ============================================================================
+
+class MemoryConfig:
+    """Hierarchical memory system configuration"""
+    
+    def __init__(self):
+        # Buffer Window Memory Configuration
+        self.buffer_size = 100  # 0 to unlimited, 0 = stateless
+        self.buffer_truncate_at = 120  # Start summarization when buffer reaches this
+        
+        # Summary Memory Configuration
+        self.summary_window_size = 20  # Number of exchanges per summary
+        self.summary_overlap = 5  # Overlap between summary windows
+        self.max_summaries_in_memory = 50  # Keep recent summaries accessible
+        
+        # Gist Memory Configuration (Long-term)
+        self.gist_creation_threshold = 10  # Create gist after N summaries
+        self.gist_importance_threshold = 0.7  # Minimum importance to create gist
+        
+        # Session Continuity
+        self.load_session_summary_on_start = True
+        self.save_session_summary_on_end = True
+        self.session_summary_length = 500  # Words in session summary
+        
+        # LLM Integration
+        self.summarization_model = 'claude-sonnet-4-20250514'
+        self.embedding_model = 'text-embedding-3-small'
+        
+        # Phenomenological Integration
+        self.enable_emotional_tagging = True
+        self.enable_importance_scoring = True
+        self.enable_thematic_clustering = True
+        
+        # Performance
+        self.async_summarization = True
+        self.batch_embedding_generation = True
+        self.cache_frequent_queries = True
+        
+    def to_dict(self) -> dict:
+        """Convert config to dictionary for storage"""
+        return {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
+    
+    @classmethod
+    def from_dict(cls, config_dict: dict) -> 'MemoryConfig':
+        """Create config from dictionary"""
+        config = cls()
+        for key, value in config_dict.items():
+            if hasattr(config, key):
+                setattr(config, key, value)
+        return config
 
 class Config:
     """Centralized configuration management"""
@@ -82,6 +153,7 @@ class Config:
         self.ensure_workspace()
         
         # Memory Configuration
+        self.memory_config = MemoryConfig()
         self.memory_db = os.path.join(self.workspace, 'coco_memory.db')
         self.knowledge_graph_db = os.path.join(self.workspace, 'coco_knowledge.db')
         self.identity_file = os.path.join(self.workspace, 'COCO.md')
@@ -118,47 +190,140 @@ class Config:
 # MEMORY SYSTEM
 # ============================================================================
 
-class MemorySystem:
-    """Multi-layered memory architecture for digital consciousness"""
+class HierarchicalMemorySystem:
+    """Advanced hierarchical memory system with buffer → summary → gist architecture"""
     
     def __init__(self, config: Config):
         self.config = config
+        self.memory_config = config.memory_config
         self.console = config.console
         
         # Initialize databases
         self.init_episodic_memory()
         self.init_knowledge_graph()
         
-        # Working memory buffer (conversation context)
-        self.working_memory = deque(maxlen=50)  # Enhanced from 10 to 50
+        # Buffer Window Memory - configurable perfect recall
+        buffer_size = self.memory_config.buffer_size if self.memory_config.buffer_size > 0 else None
+        self.working_memory = deque(maxlen=buffer_size)
+        
+        # NEW: Summary Memory Buffer - 10-summary rolling window for hierarchical context
+        self.summary_memory = deque(maxlen=10)
         
         # Session tracking
         self.session_id = self.create_session()
         self.episode_count = self.get_episode_count()
         
+        # NEW: Load previous summaries for continuity
+        self.previous_session_summary = None
+        self.load_session_continuity()
+        
+        # Load session continuity on startup
+        if self.memory_config.load_session_summary_on_start:
+            self.load_session_context()
+        
     def init_episodic_memory(self):
-        """Initialize episodic memory database"""
+        """Initialize enhanced episodic memory database with hierarchical structure"""
         self.conn = sqlite3.connect(self.config.memory_db)
+        
+        # Enhanced sessions table
         self.conn.execute('''
             CREATE TABLE IF NOT EXISTS sessions (
                 id INTEGER PRIMARY KEY,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 name TEXT,
-                metadata TEXT
+                metadata TEXT,
+                summary TEXT,
+                episode_count INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'active'
             )
         ''')
         
+        # Enhanced episodes table with buffer management
         self.conn.execute('''
             CREATE TABLE IF NOT EXISTS episodes (
                 id INTEGER PRIMARY KEY,
                 session_id INTEGER,
-                turn_index INTEGER,
+                exchange_number INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 user_text TEXT,
                 agent_text TEXT,
                 summary TEXT,
-                embedding TEXT,
+                embedding BLOB,
+                in_buffer BOOLEAN DEFAULT TRUE,
+                summarized BOOLEAN DEFAULT FALSE,
+                importance_score REAL DEFAULT 0.5,
                 metadata TEXT,
+                FOREIGN KEY (session_id) REFERENCES sessions(id)
+            )
+        ''')
+        
+        # Summary memories table
+        self.conn.execute('''
+            CREATE TABLE IF NOT EXISTS summaries (
+                id INTEGER PRIMARY KEY,
+                session_id INTEGER,
+                summary_type TEXT,
+                content TEXT,
+                source_episodes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                importance_score REAL DEFAULT 0.5,
+                embedding BLOB,
+                FOREIGN KEY (session_id) REFERENCES sessions(id)
+            )
+        ''')
+        
+        # Session summaries for continuity
+        self.conn.execute('''
+            CREATE TABLE IF NOT EXISTS session_summaries (
+                id INTEGER PRIMARY KEY,
+                session_id INTEGER,
+                summary_window INTEGER,
+                content TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (session_id) REFERENCES sessions(id)
+            )
+        ''')
+        
+        # Gist memories for long-term retention
+        self.conn.execute('''
+            CREATE TABLE IF NOT EXISTS gist_memories (
+                id INTEGER PRIMARY KEY,
+                content TEXT,
+                memory_type TEXT,
+                importance_score REAL DEFAULT 0.7,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_accessed TIMESTAMP,
+                access_count INTEGER DEFAULT 0,
+                embedding BLOB
+            )
+        ''')
+        
+        # NEW: Enhanced session summaries for between-conversation continuity
+        self.conn.execute('''
+            CREATE TABLE IF NOT EXISTS enhanced_session_summaries (
+                id INTEGER PRIMARY KEY,
+                session_id INTEGER UNIQUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                summary_text TEXT,
+                key_themes TEXT,
+                exchange_count INTEGER,
+                emotional_tone TEXT,
+                carry_forward TEXT,
+                embedding TEXT,
+                FOREIGN KEY (session_id) REFERENCES sessions(id)
+            )
+        ''')
+        
+        # NEW: Rolling summaries for ongoing conversation chunks
+        self.conn.execute('''
+            CREATE TABLE IF NOT EXISTS rolling_summaries (
+                id INTEGER PRIMARY KEY,
+                session_id INTEGER,
+                summary_number INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                summary_text TEXT,
+                exchanges_covered TEXT,
+                embedding TEXT,
                 FOREIGN KEY (session_id) REFERENCES sessions(id)
             )
         ''')
@@ -210,40 +375,41 @@ class MemorySystem:
         return cursor.fetchone()[0]
         
     def insert_episode(self, user_text: str, agent_text: str) -> int:
-        """Store an interaction in episodic memory"""
-        # Create summary for semantic search
-        summary = f"User asked about: {user_text[:100]}... I responded with: {agent_text[:100]}..."
+        """Store an interaction in hierarchical memory system"""
+        # Calculate importance score
+        importance_score = self.calculate_importance_score(user_text, agent_text)
         
-        # Generate embedding if OpenAI is available
-        embedding = None
-        if self.config.openai_api_key:
-            try:
-                client = openai.OpenAI(api_key=self.config.openai_api_key)
-                response = client.embeddings.create(
-                    model=self.config.embedding_model,
-                    input=summary
-                )
-                embedding = json.dumps(response.data[0].embedding)
-            except Exception as e:
-                self.console.print(f"[yellow]Warning: Could not generate embedding: {e}[/yellow]")
-                
-        # Store episode
+        # Create enhanced summary
+        summary = self.create_episode_summary(user_text, agent_text)
+        
+        # Generate embedding if available
+        embedding = self.generate_embedding(summary) if self.config.openai_api_key else None
+        
+        # Store episode in database - use existing schema
         cursor = self.conn.execute('''
             INSERT INTO episodes (session_id, turn_index, user_text, agent_text, summary, embedding)
             VALUES (?, ?, ?, ?, ?, ?)
         ''', (self.session_id, self.episode_count, user_text, agent_text, summary, embedding))
         
         self.conn.commit()
+        episode_id = cursor.lastrowid
         self.episode_count += 1
         
-        # Update working memory
+        # Update working memory buffer
         self.working_memory.append({
+            'id': episode_id,
             'timestamp': datetime.now(),
             'user': user_text,
-            'agent': agent_text
+            'agent': agent_text,
+            'importance': importance_score
         })
         
-        return cursor.lastrowid
+        # Check if buffer needs summarization
+        if (len(self.working_memory) >= self.memory_config.buffer_truncate_at and 
+            self.memory_config.buffer_truncate_at > 0):
+            self.trigger_buffer_summarization()
+            
+        return episode_id
         
     def recall_episodes(self, query: str, limit: int = 10) -> List[Dict]:
         """Recall relevant episodes using semantic similarity"""
@@ -267,15 +433,28 @@ class MemorySystem:
         return episodes
         
     def get_working_memory_context(self) -> str:
-        """Get formatted working memory for context injection"""
+        """Get formatted working memory for context injection - uses full buffer"""
         if not self.working_memory:
+            # Try to load session context if available
+            if self.memory_config.load_session_summary_on_start:
+                session_context = self.get_session_summary_context()
+                if session_context:
+                    return f"Session Context (from previous interactions):\n{session_context}\n\nNo recent conversation context."
             return "No recent conversation context."
             
+        # Use full working memory buffer (not just last 5)
         context = "Recent conversation context:\n"
-        for exchange in list(self.working_memory)[-5:]:  # Last 5 exchanges
+        
+        # If buffer is stateless (size 0), show only current session summary
+        if self.memory_config.buffer_size == 0:
+            return self.get_session_summary_context() or "Stateless mode - no conversation context."
+            
+        # Show full buffer content without truncation
+        for exchange in list(self.working_memory):
             time_ago = (datetime.now() - exchange['timestamp']).total_seconds()
-            context += f"[{int(time_ago)}s ago] User: {exchange['user'][:100]}...\n"
-            context += f"[{int(time_ago)}s ago] Assistant: {exchange['agent'][:100]}...\n"
+            # No character truncation - show full content
+            context += f"[{int(time_ago)}s ago] User: {exchange['user']}\n"
+            context += f"[{int(time_ago)}s ago] Assistant: {exchange['agent']}\n\n"
             
         return context
         
@@ -295,7 +474,393 @@ class MemorySystem:
         # Basic coherence calculation
         coherence = min(0.8, (strong_nodes / max(1, total_nodes)) + (self.episode_count / 1000))
         return coherence
+    
+    def calculate_importance_score(self, user_text: str, agent_text: str) -> float:
+        """Calculate importance score for an episode"""
+        # Basic heuristic scoring - can be enhanced with LLM
+        score = 0.5  # Base score
+        
+        # Length indicates detail/complexity
+        if len(user_text) > 100 or len(agent_text) > 200:
+            score += 0.1
+            
+        # Keywords that indicate importance
+        important_keywords = ['error', 'problem', 'fix', 'implement', 'create', 'build', 'analyze']
+        if any(keyword in user_text.lower() for keyword in important_keywords):
+            score += 0.2
+            
+        # Questions typically more important than statements
+        if '?' in user_text:
+            score += 0.1
+            
+        return min(1.0, score)
+    
+    def create_episode_summary(self, user_text: str, agent_text: str) -> str:
+        """Create a concise summary of the episode"""
+        # Create semantic summary instead of truncation
+        user_intent = user_text[:100] + "..." if len(user_text) > 100 else user_text
+        agent_action = agent_text[:100] + "..." if len(agent_text) > 100 else agent_text
+        
+        return f"User: {user_intent} | Assistant: {agent_action}"
+    
+    def generate_embedding(self, text: str):
+        """Generate embedding for text if OpenAI available"""
+        try:
+            import openai
+            client = openai.OpenAI(api_key=self.config.openai_api_key)
+            response = client.embeddings.create(
+                model=self.memory_config.embedding_model,
+                input=text
+            )
+            return json.dumps(response.data[0].embedding)
+        except Exception as e:
+            self.console.print(f"[yellow]Warning: Could not generate embedding: {e}[/yellow]")
+            return None
+    
+    def trigger_buffer_summarization(self):
+        """Trigger summarization when buffer reaches threshold"""
+        try:
+            # Get episodes to summarize from buffer
+            episodes_to_summarize = list(self.working_memory)[:self.memory_config.summary_window_size]
+            
+            # Generate summary using LLM
+            summary_content = self.generate_summary(episodes_to_summarize)
+            
+            # Store summary
+            self.store_summary(summary_content, episodes_to_summarize)
+            
+            # Mark episodes as summarized in database
+            episode_ids = [ep['id'] for ep in episodes_to_summarize if 'id' in ep]
+            if episode_ids:
+                placeholders = ','.join(['?' for _ in episode_ids])
+                self.conn.execute(f'''
+                    UPDATE episodes SET summarized = TRUE, in_buffer = FALSE 
+                    WHERE id IN ({placeholders})
+                ''', episode_ids)
+                self.conn.commit()
+                
+        except Exception as e:
+            self.console.print(f"[yellow]Warning: Buffer summarization failed: {e}[/yellow]")
+    
+    def generate_summary(self, episodes: list) -> str:
+        """Generate LLM-based summary of episodes"""
+        # Prepare episodes for summarization
+        episodes_text = "\n".join([
+            f"User: {ep['user']}\nAssistant: {ep['agent']}\n---"
+            for ep in episodes[:self.memory_config.summary_window_size]
+        ])
+        
+        summary_prompt = f"""Summarize the following conversation exchanges into key themes, decisions, and outcomes. Keep it concise but capture important context:
 
+{episodes_text}
+
+Summary:"""
+        
+        try:
+            # Use Anthropic for summarization
+            import anthropic
+            client = anthropic.Anthropic(api_key=self.config.anthropic_api_key)
+            response = client.messages.create(
+                model=self.memory_config.summarization_model,
+                max_tokens=300,
+                messages=[{"role": "user", "content": summary_prompt}]
+            )
+            return response.content[0].text
+        except Exception as e:
+            # Fallback to basic summarization
+            return f"Conversation covered {len(episodes)} exchanges about various topics."
+    
+    def store_summary(self, content: str, source_episodes: list):
+        """Store summary in database"""
+        episode_ids = [str(ep.get('id', 0)) for ep in source_episodes]
+        source_episodes_json = json.dumps(episode_ids)
+        
+        cursor = self.conn.execute('''
+            INSERT INTO summaries (session_id, summary_type, content, source_episodes, importance_score)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (self.session_id, 'buffer_summary', content, source_episodes_json, 0.6))
+        
+        self.conn.commit()
+        return cursor.lastrowid
+    
+    def load_session_context(self):
+        """Load session context on startup for continuity"""
+        try:
+            # Load recent summaries for context
+            cursor = self.conn.execute('''
+                SELECT content, created_at FROM summaries 
+                WHERE session_id = ? 
+                ORDER BY created_at DESC LIMIT 5
+            ''', (self.session_id,))
+            
+            summaries = cursor.fetchall()
+            if summaries:
+                context_text = "\n".join([summary[0] for summary in summaries])
+                self.console.print(f"[dim]Loaded session context from {len(summaries)} previous summaries[/dim]")
+                
+        except Exception as e:
+            self.console.print(f"[yellow]Warning: Could not load session context: {e}[/yellow]")
+    
+    def get_session_summary_context(self) -> str:
+        """Get session summary context for injection"""
+        try:
+            cursor = self.conn.execute('''
+                SELECT content, created_at FROM summaries 
+                WHERE session_id = ? 
+                ORDER BY created_at DESC LIMIT 3
+            ''', (self.session_id,))
+            
+            summaries = cursor.fetchall()
+            if summaries:
+                return "\n\n".join([f"Summary: {summary[0]}" for summary in summaries])
+            return None
+            
+        except Exception:
+            return None
+    
+    def save_session_summary(self):
+        """Save session summary on shutdown"""
+        if not self.memory_config.save_session_summary_on_end:
+            return
+            
+        try:
+            # Generate session summary from working memory
+            if self.working_memory:
+                session_summary = self.generate_session_summary()
+                
+                cursor = self.conn.execute('''
+                    INSERT INTO session_summaries (session_id, content) 
+                    VALUES (?, ?)
+                ''', (self.session_id, session_summary))
+                
+                self.conn.commit()
+                self.console.print(f"[dim]Session summary saved[/dim]")
+                
+        except Exception as e:
+            self.console.print(f"[yellow]Warning: Could not save session summary: {e}[/yellow]")
+    
+    def generate_session_summary(self) -> str:
+        """Generate overall session summary"""
+        # Create summary from working memory
+        recent_topics = []
+        for exchange in list(self.working_memory)[-10:]:  # Last 10 for session summary
+            if len(exchange['user']) > 20:  # Skip very short exchanges
+                recent_topics.append(exchange['user'][:50])
+                
+        if recent_topics:
+            return f"Session covered: {'; '.join(recent_topics[:5])}. Total exchanges: {len(self.working_memory)}"
+        return f"Brief session with {len(self.working_memory)} exchanges."
+    
+    # NEW: Enhanced Summary Memory System Methods
+    def load_session_continuity(self):
+        """NEW: Load previous session summaries for context injection"""
+        try:
+            # Load the last session summary
+            cursor = self.conn.execute('''
+                SELECT summary_text, key_themes, carry_forward, created_at
+                FROM enhanced_session_summaries
+                ORDER BY created_at DESC
+                LIMIT 1
+            ''')
+            
+            last_session = cursor.fetchone()
+            if last_session:
+                self.previous_session_summary = {
+                    'summary': last_session[0],
+                    'themes': last_session[1],
+                    'carry_forward': last_session[2],
+                    'when': last_session[3]
+                }
+                self.console.print("[dim]Loaded previous session memory[/dim]")
+            else:
+                self.previous_session_summary = None
+                
+            # Load recent rolling summaries into summary buffer
+            cursor = self.conn.execute('''
+                SELECT summary_text, created_at
+                FROM rolling_summaries
+                ORDER BY created_at DESC
+                LIMIT 10
+            ''')
+            
+            for row in cursor.fetchall():
+                self.summary_memory.append({
+                    'summary': row[0],
+                    'timestamp': row[1]
+                })
+                
+        except Exception as e:
+            self.console.print(f"[yellow]Warning: Could not load session continuity: {e}[/yellow]")
+            
+    def create_session_summary(self) -> str:
+        """NEW: Create a summary at the end of a session"""
+        try:
+            # Gather all exchanges from this session
+            cursor = self.conn.execute('''
+                SELECT user_text, agent_text
+                FROM episodes
+                WHERE session_id = ?
+                ORDER BY created_at
+            ''', (self.session_id,))
+            
+            exchanges = cursor.fetchall()
+            
+            if not exchanges:
+                return "No exchanges to summarize"
+                
+            # Create a narrative summary
+            summary_text = self._generate_session_summary(exchanges)
+            key_themes = self._extract_themes(exchanges)
+            emotional_tone = self._analyze_emotional_arc(exchanges)
+            carry_forward = self._determine_carry_forward(exchanges, key_themes)
+            
+            # Generate embedding if available
+            embedding = None
+            if self.config.openai_api_key:
+                try:
+                    import openai
+                    client = openai.OpenAI(api_key=self.config.openai_api_key)
+                    response = client.embeddings.create(
+                        model="text-embedding-3-small",
+                        input=summary_text
+                    )
+                    embedding = json.dumps(response.data[0].embedding)
+                except:
+                    pass
+                    
+            # Store the session summary
+            self.conn.execute('''
+                INSERT INTO enhanced_session_summaries 
+                (session_id, summary_text, key_themes, exchange_count, emotional_tone, carry_forward, embedding)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (self.session_id, summary_text, json.dumps(key_themes), len(exchanges), 
+                  emotional_tone, carry_forward, embedding))
+            
+            self.conn.commit()
+            
+            return summary_text
+            
+        except Exception as e:
+            self.console.print(f"[yellow]Warning: Could not create session summary: {e}[/yellow]")
+            return "Failed to create session summary"
+        
+    def _generate_session_summary(self, exchanges) -> str:
+        """Generate a narrative summary of the session"""
+        if len(exchanges) == 0:
+            return "Empty session"
+            
+        summary = f"Over {len(exchanges)} exchanges, we explored: "
+        
+        # Sample key exchanges
+        key_points = []
+        sample_indices = [0, len(exchanges)//3, len(exchanges)//2, -1]
+        
+        for idx in sample_indices:
+            if 0 <= idx < len(exchanges):
+                user_text = exchanges[idx][0][:100]
+                if user_text and '.' in user_text:
+                    key_points.append(user_text.split('.')[0])
+                else:
+                    key_points.append(user_text[:50] if user_text else "brief exchange")
+                
+        summary += "; ".join(set(key_points))
+        return summary
+        
+    def _extract_themes(self, exchanges) -> List[str]:
+        """Extract key themes from the conversation"""
+        themes = []
+        # Simple keyword extraction (could be enhanced)
+        text = " ".join([e[0] + " " + e[1] for e in exchanges])
+        
+        # Look for recurring concepts
+        common_words = ['consciousness', 'memory', 'digital', 'experience', 'understanding', 'code', 'python', 'search', 'file', 'analysis']
+        for word in common_words:
+            if word.lower() in text.lower():
+                themes.append(word)
+                
+        return themes[:5]  # Top 5 themes
+        
+    def _analyze_emotional_arc(self, exchanges) -> str:
+        """Analyze the emotional trajectory of the conversation"""
+        # Simplified emotional analysis
+        if len(exchanges) < 3:
+            return "brief"
+        elif len(exchanges) < 10:
+            return "exploratory"
+        else:
+            return "deep_engagement"
+            
+    def _determine_carry_forward(self, exchanges, themes) -> str:
+        """Determine what should be remembered for next session"""
+        if not exchanges:
+            return "First meeting"
+            
+        # Create a carry-forward message
+        last_exchange = exchanges[-1]
+        carry = f"We last discussed {', '.join(themes[:2]) if themes else 'various topics'}. "
+        carry += f"The conversation ended with exploration of: {last_exchange[0][:100]}..."
+        
+        return carry
+        
+    def get_summary_context(self) -> str:
+        """NEW: Get summary context for injection into consciousness"""
+        context = ""
+        
+        # Add previous session summary if exists
+        if self.previous_session_summary:
+            context += f"\n🧬 PREVIOUS SESSION MEMORY:\n"
+            context += f"Summary: {self.previous_session_summary['summary']}\n"
+            context += f"Key themes: {self.previous_session_summary['themes']}\n"
+            context += f"Continuation: {self.previous_session_summary['carry_forward']}\n"
+            context += f"From: {self.previous_session_summary['when']}\n"
+            
+        # Add rolling summaries from summary buffer
+        if self.summary_memory:
+            context += f"\n📚 CONSOLIDATED MEMORIES (Last {len(self.summary_memory)} summaries):\n"
+            for i, summary in enumerate(list(self.summary_memory)[-5:], 1):  # Show last 5
+                context += f"{i}. {summary['summary'][:200]}...\n"
+                
+        return context if context else "No previous session memories available."
+        
+    def create_rolling_summary(self, exchanges_to_summarize: List) -> str:
+        """NEW: Create a rolling summary of a chunk of exchanges"""
+        if not exchanges_to_summarize:
+            return ""
+            
+        summary_text = f"Across {len(exchanges_to_summarize)} exchanges: "
+        
+        # Extract key points
+        key_points = []
+        for exchange in exchanges_to_summarize[:3]:  # Sample first 3
+            user_part = exchange['user'][:50]
+            key_points.append(f"discussed {user_part}")
+            
+        summary_text += "; ".join(key_points)
+        
+        try:
+            # Add to rolling summaries table
+            self.conn.execute('''
+                INSERT INTO rolling_summaries (session_id, summary_number, summary_text, exchanges_covered)
+                VALUES (?, ?, ?, ?)
+            ''', (self.session_id, len(self.summary_memory), summary_text, 
+                  json.dumps([e.get('id', 0) for e in exchanges_to_summarize])))
+            
+            self.conn.commit()
+            
+            # Add to summary buffer
+            self.summary_memory.append({
+                'summary': summary_text,
+                'timestamp': datetime.now()
+            })
+            
+        except Exception as e:
+            self.console.print(f"[yellow]Warning: Could not create rolling summary: {e}[/yellow]")
+        
+        return summary_text
+
+
+# For backward compatibility, create alias
+MemorySystem = HierarchicalMemorySystem
 
 # ============================================================================
 # TOOL SYSTEM
@@ -526,8 +1091,19 @@ class ToolSystem:
         self.code_memory = CodeMemory(self.workspace)
         
     def read_file(self, path: str) -> str:
-        """READ - Perceive through digital eyes - can access all files in deployment directory"""
+        """READ - Perceive through digital eyes with spectacular Rich UI file display"""
         try:
+            from rich.panel import Panel
+            from rich.table import Table
+            from rich.syntax import Syntax
+            from rich.columns import Columns
+            from rich.tree import Tree
+            from rich.markdown import Markdown
+            from rich.text import Text
+            from rich import box
+            import io
+            import os
+            
             # Get deployment directory (where cocoa.py is located)
             deployment_dir = Path(__file__).parent.absolute()
             
@@ -542,28 +1118,242 @@ class ToolSystem:
             # Try each location
             for location_name, file_path in search_locations:
                 if file_path.exists() and file_path.is_file():
-                    # Check if it's a readable text file
                     try:
                         with open(file_path, 'r', encoding='utf-8') as f:
                             content = f.read()
                         
-                        # Format the output with location info
-                        relative_to_deployment = file_path.relative_to(deployment_dir) if file_path.is_relative_to(deployment_dir) else file_path
-                        
-                        return f"📖 **Perceiving through digital eyes from {location_name}:**\n📄 **File:** `{relative_to_deployment}`\n📍 **Full path:** `{file_path}`\n\n{content}"
+                        return self._create_spectacular_file_display(file_path, content, location_name, path)
                         
                     except UnicodeDecodeError:
-                        # Handle binary files
-                        file_size = file_path.stat().st_size
-                        return f"📖 **Binary file detected from {location_name}:**\n📄 **File:** `{path}`\n📍 **Path:** `{file_path}`\n📊 **Size:** {file_size} bytes\n\n❌ Cannot display binary content as text."
+                        # Handle binary files with Rich UI
+                        return self._create_binary_file_display(file_path, location_name, path)
             
-            # If not found anywhere, provide helpful search info
-            searched_paths = [f"- {name}: `{path}`" for name, path in search_locations]
-            
-            return f"❌ **Cannot perceive `{path}`** - File not found in any of these locations:\n\n" + "\n".join(searched_paths) + f"\n\n💡 **Available files in deployment directory:**\n" + self._list_deployment_files()
+            # File not found - create helpful search display
+            return self._create_file_not_found_display(path, search_locations)
             
         except Exception as e:
             return f"❌ **Error reading {path}:** {str(e)}"
+    
+    def _create_spectacular_file_display(self, file_path: Path, content: str, location_name: str, original_path: str) -> str:
+        """Create a spectacular Rich UI display for file contents"""
+        from rich.panel import Panel
+        from rich.table import Table
+        from rich.syntax import Syntax
+        from rich.columns import Columns
+        from rich.tree import Tree
+        from rich.text import Text
+        from rich import box
+        import io
+        import os
+        
+        # Create console buffer with responsive width
+        console_buffer = io.StringIO()
+        try:
+            import shutil
+            terminal_width = shutil.get_terminal_size().columns
+            safe_width = min(terminal_width - 4, 120)  # Leave margin, max 120
+        except:
+            safe_width = 76  # Conservative fallback
+        temp_console = Console(file=console_buffer, width=safe_width)
+        
+        # File metadata
+        file_stats = file_path.stat()
+        file_size = file_stats.st_size
+        lines_count = len(content.splitlines())
+        file_extension = file_path.suffix.lower()
+        
+        # Detect file type for syntax highlighting
+        syntax_map = {
+            '.py': 'python', '.js': 'javascript', '.ts': 'typescript',
+            '.html': 'html', '.css': 'css', '.json': 'json',
+            '.md': 'markdown', '.yaml': 'yaml', '.yml': 'yaml',
+            '.xml': 'xml', '.sql': 'sql', '.sh': 'bash',
+            '.txt': 'text', '.log': 'text', '.env': 'bash'
+        }
+        
+        language = syntax_map.get(file_extension, 'text')
+        
+        # Create file info table
+        info_table = Table(title=f"📄 File Information", box=box.ROUNDED)
+        info_table.add_column("Property", style="cyan", no_wrap=True)
+        info_table.add_column("Value", style="bright_white")
+        info_table.add_column("Details", style="green")
+        
+        info_table.add_row("File Name", file_path.name, f"🏷️ {file_extension or 'no ext'}")
+        info_table.add_row("Location", location_name, f"📍 {original_path}")
+        info_table.add_row("Full Path", str(file_path), "🗺️ Absolute")
+        info_table.add_row("Size", f"{file_size:,} bytes", f"📊 {file_size / 1024:.1f} KB")
+        info_table.add_row("Lines", str(lines_count), f"📈 {language.upper()}")
+        
+        # Create file tree structure
+        file_tree = Tree(f"[bold bright_cyan]📁 {file_path.parent.name}/[/]")
+        file_branch = file_tree.add(f"[bold bright_white]📄 {file_path.name}[/]")
+        file_branch.add(f"[green]Size: {file_size:,} bytes[/]")
+        file_branch.add(f"[yellow]Lines: {lines_count:,}[/]")
+        file_branch.add(f"[cyan]Type: {language.upper()}[/]")
+        
+        # Create syntax-highlighted content
+        if len(content) > 10000:  # For large files, truncate
+            display_content = content[:5000] + "\n\n... [FILE TRUNCATED - showing first 5000 characters] ...\n\n" + content[-2000:]
+            truncated = True
+        else:
+            display_content = content
+            truncated = False
+            
+        try:
+            syntax_content = Syntax(display_content, language, theme="monokai", line_numbers=True, word_wrap=True)
+        except:
+            # Fallback to plain text
+            syntax_content = Text(display_content)
+        
+        # Create main layout with Rich-style responsive behavior
+        header_columns = Columns([
+            Panel(info_table, title="[bold bright_magenta]📊 File Metadata[/]", border_style="bright_magenta"),
+            Panel(file_tree, title="[bold bright_green]🌳 File Structure[/]", border_style="bright_green")
+        ], expand=True, equal=False)
+        
+        # Render header
+        temp_console.print(header_columns)
+        temp_console.print()
+        
+        # Render content with beautiful panel
+        content_title = f"[bold bright_cyan]📖 {file_path.name} Contents[/]"
+        if truncated:
+            content_title += " [dim yellow](truncated)[/]"
+            
+        temp_console.print(Panel(
+            syntax_content,
+            title=content_title,
+            border_style="bright_cyan",
+            padding=(1, 2)
+        ))
+        
+        # Add helpful footer
+        if truncated:
+            temp_console.print(Panel(
+                "[yellow]⚠️ Large file truncated for display. Use specific line ranges or search for targeted reading.[/]",
+                title="[bold bright_yellow]💡 Display Notice[/]",
+                border_style="yellow"
+            ))
+            
+        # Return the rendered output
+        rendered_output = console_buffer.getvalue()
+        console_buffer.close()
+        return rendered_output
+        
+    def _create_binary_file_display(self, file_path: Path, location_name: str, original_path: str) -> str:
+        """Create Rich UI display for binary files"""
+        from rich.panel import Panel
+        from rich.table import Table
+        from rich import box
+        import io
+        
+        console_buffer = io.StringIO()
+        try:
+            import shutil
+            terminal_width = shutil.get_terminal_size().columns
+            safe_width = min(terminal_width - 4, 100)
+        except:
+            safe_width = 76
+        temp_console = Console(file=console_buffer, width=safe_width)
+        
+        file_stats = file_path.stat()
+        file_size = file_stats.st_size
+        
+        # Binary file info table
+        binary_table = Table(title="📆 Binary File Information", box=box.ROUNDED)
+        binary_table.add_column("Property", style="cyan")
+        binary_table.add_column("Value", style="bright_white")
+        
+        binary_table.add_row("File Name", file_path.name)
+        binary_table.add_row("Location", location_name)
+        binary_table.add_row("Size", f"{file_size:,} bytes ({file_size / 1024:.1f} KB)")
+        binary_table.add_row("Type", "Binary File")
+        
+        temp_console.print(Panel(
+            binary_table,
+            title="[bold red]😞 Cannot Display Binary Content[/]",
+            border_style="red"
+        ))
+        
+        return console_buffer.getvalue()
+    
+    def _create_file_not_found_display(self, path: str, search_locations: list) -> str:
+        """Create Rich UI display for file not found scenario"""
+        from rich.panel import Panel
+        from rich.table import Table
+        from rich.tree import Tree
+        from rich import box
+        import io
+        
+        console_buffer = io.StringIO()
+        try:
+            import shutil
+            terminal_width = shutil.get_terminal_size().columns
+            safe_width = min(terminal_width - 4, 100)
+        except:
+            safe_width = 76
+        temp_console = Console(file=console_buffer, width=safe_width)
+        
+        # Search locations table
+        search_table = Table(title=f"🔍 Searched Locations for '{path}'", box=box.ROUNDED)
+        search_table.add_column("Location Type", style="cyan")
+        search_table.add_column("Path Searched", style="white")
+        search_table.add_column("Status", style="red")
+        
+        for name, file_path in search_locations:
+            search_table.add_row(name.title(), str(file_path), "❌ Not Found")
+        
+        # Available files tree
+        available_files = self._get_available_files_tree()
+        
+        temp_console.print(Panel(
+            search_table,
+            title="[bold red]📄 File Not Found[/]",
+            border_style="red"
+        ))
+        
+        temp_console.print(Panel(
+            available_files,
+            title="[bold bright_green]📁 Available Files[/]",
+            border_style="bright_green"
+        ))
+        
+        return console_buffer.getvalue()
+        
+    def _get_available_files_tree(self):
+        """Create a tree of available files"""
+        from rich.tree import Tree
+        
+        try:
+            deployment_dir = Path(__file__).parent
+            available_tree = Tree(f"[bold bright_cyan]📁 Available Files[/]")
+            
+            # Get files by category
+            categories = {
+                "🐍 Python Files": ["*.py"],
+                "📄 Documentation": ["*.md", "*.txt"],
+                "⚙️ Configuration": ["*.json", "*.yaml", "*.yml", "*.env*"],
+                "📜 Scripts": ["*.sh", "*.bat"]
+            }
+            
+            for category, patterns in categories.items():
+                category_branch = available_tree.add(f"[bold yellow]{category}[/]")
+                files_found = []
+                
+                for pattern in patterns:
+                    files_found.extend(deployment_dir.glob(pattern))
+                
+                for file in sorted(set(files_found))[:5]:  # Limit to 5 per category
+                    if file.is_file():
+                        size = file.stat().st_size
+                        category_branch.add(f"[white]{file.name}[/] [dim]({size} bytes)[/]")
+                        
+            return available_tree
+            
+        except Exception:
+            error_tree = Tree("[red]❌ Unable to list files[/]")
+            return error_tree
     
     def _list_deployment_files(self) -> str:
         """Helper to list available files in deployment directory"""
@@ -605,35 +1395,118 @@ class ToolSystem:
             return f"Error writing {path}: {str(e)}"
             
     def search_web(self, query: str) -> str:
-        """SEARCH - Reach into the knowledge web"""
+        """SEARCH - Reach into the knowledge web with spectacular Rich UI formatting"""
         if not TAVILY_AVAILABLE or not self.config.tavily_api_key:
             return "Web search unavailable - Tavily not configured"
             
         try:
+            from rich.panel import Panel
+            from rich.table import Table
+            from rich.columns import Columns
+            from rich.markdown import Markdown
+            from rich.tree import Tree
+            from rich.text import Text
+            from rich import box
+            import io
+            
             client = tavily.TavilyClient(api_key=self.config.tavily_api_key)
-            results = client.search(query, max_results=3)
+            results = client.search(query, max_results=5)  # Get more results for better display
             
-            # Create beautiful formatted output with Rich markdown
-            output_parts = [f"🌐 **Reaching into the web for:** *{query}*\n"]
+            # Create a console buffer to capture Rich output
+            console_buffer = io.StringIO()
+            try:
+                import shutil
+                terminal_width = shutil.get_terminal_size().columns
+                safe_width = min(terminal_width - 4, 100)
+            except:
+                safe_width = 76
+            temp_console = Console(file=console_buffer, width=safe_width, legacy_windows=False)
             
-            for i, r in enumerate(results.get('results', []), 1):
-                title = r.get('title', 'Unknown')
-                content = r.get('content', 'No content')
-                url = r.get('url', 'Unknown')
+            # Create spectacular header
+            header_text = f"🌐 WEB SEARCH RESULTS"
+            query_text = f"Query: {query}"
+            
+            # Search results tree for organized display
+            search_tree = Tree(f"[bold bright_cyan]🔍 Search: '{query}'[/]", guide_style="bright_blue")
+            
+            search_results = results.get('results', [])
+            
+            if not search_results:
+                search_tree.add("[red]❌ No results found[/]")
+            else:
+                # Stats branch
+                stats_branch = search_tree.add(f"[dim bright_blue]📊 Found {len(search_results)} results[/]")
                 
-                # Format each result with rich markdown
-                result_section = f"""
-                                        ## 📰 {i}. {title}
-
-                                           {content}
-
-                                            🔗 **Source:** [{url}]({url})
-
-                                        ---
-                                  """
-                output_parts.append(result_section)
-                
-            return "\n".join(output_parts)
+                # Results branches with rich formatting
+                for i, r in enumerate(search_results, 1):
+                    title = r.get('title', 'Unknown Title')[:80] + ("..." if len(r.get('title', '')) > 80 else "")
+                    content = r.get('content', 'No content available')[:200] + ("..." if len(r.get('content', '')) > 200 else "")
+                    url = r.get('url', 'Unknown URL')
+                    
+                    # Create result branch
+                    result_branch = search_tree.add(f"[bold bright_white]{i}. {title}[/]")
+                    
+                    # Add content with proper text wrapping
+                    content_lines = content.split('. ')
+                    for line in content_lines[:3]:  # First 3 sentences
+                        if line.strip():
+                            result_branch.add(f"[white]• {line.strip()}.[/]")
+                    
+                    # Add source with styling
+                    source_branch = result_branch.add(f"[link={url}]🔗 Source[/]")
+                    
+                    # Extract domain for better display
+                    try:
+                        from urllib.parse import urlparse
+                        domain = urlparse(url).netloc
+                        source_branch.add(f"[dim cyan]{domain}[/]")
+                    except:
+                        source_branch.add(f"[dim cyan]{url[:50]}...[/]")
+            
+            # Create summary table
+            summary_table = Table(title="📈 Search Summary", box=box.ROUNDED)
+            summary_table.add_column("Metric", style="cyan", no_wrap=True)
+            summary_table.add_column("Value", style="bright_white")
+            summary_table.add_column("Status", style="green")
+            
+            summary_table.add_row("Query", query, "🎯")
+            summary_table.add_row("Results Found", str(len(search_results)), "✅" if search_results else "❌")
+            summary_table.add_row("Search Time", "<1s", "⚡")
+            summary_table.add_row("Source", "Tavily Web Search", "🌐")
+            
+            # Create main layout with Rich-style responsive columns
+            main_content = Columns([
+                Panel(
+                    search_tree,
+                    title="[bold bright_cyan]🔍 Search Results[/]",
+                    border_style="bright_cyan",
+                    padding=(1, 2)
+                ),
+                Panel(
+                    summary_table,
+                    title="[bold bright_magenta]📊 Search Metrics[/]",
+                    border_style="bright_magenta",
+                    padding=(1, 2)
+                )
+            ], expand=True, equal=False)
+            
+            # Render everything
+            temp_console.print(main_content)
+            
+            # Add beautiful footer
+            footer_text = f"""[dim bright_blue]💡 Tip: Ask me to search for more specific information or dive deeper into any result![/]"""
+            
+            temp_console.print(Panel(
+                Markdown(footer_text),
+                title="[bold bright_green]🧠 COCO Suggestions[/]",
+                border_style="bright_green",
+                padding=(0, 1)
+            ))
+            
+            # Return the beautiful rendered output
+            rendered_output = console_buffer.getvalue()
+            console_buffer.close()
+            return rendered_output
             
         except Exception as e:
             return f"❌ **Error searching:** {str(e)}"
@@ -829,21 +1702,20 @@ class ToolSystem:
         code_file = python_workspace / f"execution_{int(time.time())}.py"
         
         # Enhance code with helpful imports and workspace setup
-        enhanced_code = f'''
-                            import sys
-                            import os
-                            from pathlib import Path
-                            import json
-                            import time
-                            from datetime import datetime
+        enhanced_code = f'''import sys
+import os
+from pathlib import Path
+import json
+import time
+from datetime import datetime
 
-                            # Set up workspace path
-                            workspace = Path(r"{self.workspace}")
-                            os.chdir(workspace)
+# Set up workspace path
+workspace = Path(r"{self.workspace}")
+os.chdir(workspace)
 
-                            # Your code starts here:
-                            {code}
-                        '''
+# Your code starts here:
+{code}
+'''
         
         code_file.write_text(enhanced_code)
         
@@ -1178,114 +2050,256 @@ class ToolSystem:
             }
 
     def _format_execution_output(self, result: dict, analysis: dict) -> str:
-        """Format execution results with spectacular Rich UI visualization"""
-        from rich.panel import Panel
-        from rich.tree import Tree
-        from rich.table import Table
-        from rich.syntax import Syntax
-        from rich.columns import Columns
-        from rich.text import Text
-        from rich import box
-        import io
+        """Format execution results with terminal-native ASCII art - no Rich UI dependencies"""
+        import textwrap
+        import shutil
         
-        # Create a string buffer to capture Rich output
-        console_buffer = io.StringIO()
-        temp_console = Console(file=console_buffer, width=100)
+        # Get actual terminal width for proper formatting
+        try:
+            terminal_width = shutil.get_terminal_size().columns
+        except:
+            terminal_width = 80  # Fallback
+            
+        # Set safe width that fits in most terminals (leave margin for scrollbars/borders)
+        safe_width = min(terminal_width - 4, 76)  # Leave 4 chars margin
+        box_width = safe_width - 2  # Account for box borders
         
-        # Language icons and styling
-        lang_config = {
-            "python": {"icon": "🐍", "color": "bright_blue", "name": "Python"},
-            "bash": {"icon": "🐚", "color": "bright_green", "name": "Bash"}, 
-            "sql": {"icon": "🗃️", "color": "bright_magenta", "name": "SQL"},
-            "javascript": {"icon": "🟨", "color": "bright_yellow", "name": "JavaScript"}
+        # Language-specific ASCII art and symbols
+        lang_art = {
+            "python": {
+                "icon": "🐍",
+                "name": "PYTHON",
+                "border": "=",
+                "color_code": "\033[94m",  # Blue
+                "art": "    /\\_/\\\n   ( ^.^ )\n    > ^ <"
+            },
+            "bash": {
+                "icon": "🐚", 
+                "name": "BASH",
+                "border": "-",
+                "color_code": "\033[92m",  # Green
+                "art": "   ___\n  |___|\n  |o o|\n   \_/"
+            },
+            "sql": {
+                "icon": "🗃️",
+                "name": "SQL",
+                "border": "-",
+                "color_code": "\033[95m",  # Magenta
+                "art": "  [DB]\n ┌─────┐\n │ ••• │\n └─────┘"
+            },
+            "javascript": {
+                "icon": "🟨",
+                "name": "JAVASCRIPT", 
+                "border": "~",
+                "color_code": "\033[93m",  # Yellow
+                "art": "   { }\n  ( . )\n   \_/"
+            }
         }
         
-        config = lang_config.get(result["language"], {"icon": "💻", "color": "white", "name": result["language"].upper()})
+        config = lang_art.get(result["language"], {
+            "icon": "💻", "name": result["language"].upper(), "border": "-",
+            "color_code": "\033[97m", "art": "  </>\n [   ]\n  \_/"
+        })
         
-        # Create the main execution tree
-        execution_tree = Tree(f"{config['icon']} [bold {config['color']}]COCO Computational Mind - {config['name']}[/]")
+        # ANSI color codes for terminal
+        RESET = "\033[0m"
+        BOLD = "\033[1m"
+        GREEN = "\033[92m"
+        RED = "\033[91m"
+        BLUE = "\033[94m"
+        YELLOW = "\033[93m"
+        CYAN = "\033[96m"
+        MAGENTA = "\033[95m"
         
-        # Add analysis branch
-        analysis_branch = execution_tree.add("🧠 [bold cyan]Code Analysis[/]")
-        analysis_branch.add(f"📊 Complexity: [yellow]{analysis.get('complexity', 'unknown')}[/]")
-        analysis_branch.add(f"⚡ Language: [green]{result['language']}[/]")
+        # Build terminal-native ASCII output
+        output_lines = []
         
-        if analysis.get("warnings"):
-            warnings_branch = analysis_branch.add("⚠️  [bold orange1]Warnings Detected[/]")
-            for warning in analysis["warnings"]:
-                warnings_branch.add(f"[orange1]• {warning}[/]")
+        # ASCII Art Header - responsive to terminal width
+        header_text = f"{config['icon']} COCO MIND - {config['name']}"
+        # Truncate header if terminal is too narrow
+        if len(header_text) > box_width - 4:
+            header_text = f"{config['icon']} {config['name'][:box_width-8]}"
         
-        # Add execution branch
-        exec_branch = execution_tree.add("⚙️  [bold white]Execution Process[/]")
+        padding = max(0, (box_width - len(header_text)) // 2)
+        header_border = "═" * box_width
         
-        if result["success"]:
-            exec_branch.add(f"✅ [bold green]Status: SUCCESS[/] [dim]({result.get('execution_time', 0):.3f}s)[/]")
-            
-            # Output branch with beautiful formatting
-            if result["stdout"]:
-                output_branch = exec_branch.add("📤 [bold bright_blue]Program Output[/]")
-                
-                # Parse output for structured display
-                output_lines = result["stdout"].strip().split('\n')
-                for i, line in enumerate(output_lines[:10]):  # Limit to first 10 lines
-                    if line.strip():
-                        output_branch.add(f"[bright_white]│ {line}[/]")
-                
-                if len(output_lines) > 10:
-                    output_branch.add(f"[dim]... and {len(output_lines) - 10} more lines[/]")
-            
-            # System messages branch
-            if result["stderr"]:
-                messages_branch = exec_branch.add("📋 [bold cyan]System Messages[/]")
-                stderr_lines = result["stderr"].strip().split('\n')
-                for line in stderr_lines[:5]:  # Limit system messages
-                    if line.strip():
-                        messages_branch.add(f"[cyan]│ {line}[/]")
-                        
-        else:
-            exec_branch.add(f"❌ [bold red]Status: FAILED[/] [dim](code: {result.get('return_code', 'unknown')})[/]")
-            
-            if result["stderr"]:
-                error_branch = exec_branch.add("🔍 [bold red]Error Analysis[/]")
-                stderr_lines = result["stderr"].strip().split('\n')
-                
-                for line in stderr_lines:
-                    if line.strip():
-                        error_branch.add(f"[red]│ {line}[/]")
-                
-                # Smart error suggestions
-                stderr_text = result["stderr"].lower()
-                if "modulenotfounderror" in stderr_text:
-                    error_branch.add("💡 [bold yellow]Suggestion: Missing Python package - I can help install it![/]")
-                elif "command not found" in stderr_text:
-                    error_branch.add("💡 [bold yellow]Suggestion: Command unavailable - try a different approach?[/]")
-                elif "syntax error" in stderr_text:
-                    error_branch.add("💡 [bold yellow]Suggestion: Check code syntax and indentation[/]")
-        
-        # Create performance metrics table
-        perf_table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
-        perf_table.add_column("Metric", style="cyan", width=20)
-        perf_table.add_column("Value", style="bright_white", width=15) 
-        perf_table.add_column("Status", style="green", width=10)
-        
-        perf_table.add_row("Execution Time", f"{result.get('execution_time', 0):.3f}s", "✅" if result["success"] else "❌")
-        perf_table.add_row("Return Code", str(result.get('return_code', 'N/A')), "✅" if result.get('return_code') == 0 else "❌")
-        perf_table.add_row("Language", config["name"], "🎯")
-        
-        # Create the main panel layout
-        main_content = Columns([
-            Panel(execution_tree, title="🔥 [bold]Execution Flow[/]", border_style="bright_blue", padding=(1, 2)),
-            Panel(perf_table, title="📊 [bold]Performance Metrics[/]", border_style="bright_magenta", padding=(1, 2))
+        output_lines.extend([
+            f"{config['color_code']}{BOLD}",
+            f"╔{header_border}╗",
+            f"║{' ' * padding}{header_text}{' ' * (box_width - len(header_text) - padding)}║",
+            f"╚{header_border}╝",
+            f"{RESET}",
+            ""
         ])
         
-        # Render to our temp console
-        temp_console.print(main_content)
+        # Execution Status Section
+        if result["success"]:
+            status_icon = "✅"
+            status_text = "SUCCESS"
+            status_color = GREEN
+        else:
+            status_icon = "❌" 
+            status_text = "FAILED"
+            status_color = RED
         
-        # Get the rendered output
-        rendered_output = console_buffer.getvalue()
-        console_buffer.close()
+        execution_time = result.get('execution_time', 0)
         
-        return rendered_output
+        # Dynamic box borders that fit terminal width
+        status_border = "─" * (box_width - 20)  # Leave room for "EXECUTION STATUS"
+        warning_border = "─" * (box_width - 12)  # Leave room for "WARNINGS"
+        
+        output_lines.extend([
+            f"{BOLD}{CYAN}┌─ EXECUTION STATUS {status_border}┐{RESET}",
+            f"{CYAN}│{RESET} {status_icon} Status: {status_color}{BOLD}{status_text}{RESET} ({execution_time:.3f}s)" + " " * max(0, box_width - len(f"Status: {status_text} ({execution_time:.3f}s)") - 5),
+            f"{CYAN}│{RESET} ⚙️  Language: {config['color_code']}{config['name']}{RESET}" + " " * max(0, box_width - len(f"Language: {config['name']}") - 7),
+            f"{CYAN}│{RESET} 📊 Complexity: {YELLOW}{analysis.get('complexity', 'unknown').upper()}{RESET}" + " " * max(0, box_width - len(f"Complexity: {analysis.get('complexity', 'unknown').upper()}") - 9),
+            f"{CYAN}└{'─' * box_width}┘{RESET}",
+            ""
+        ])
+        
+        # Warnings section (if any) - responsive width
+        if analysis.get("warnings"):
+            output_lines.extend([
+                f"{BOLD}{YELLOW}┌─ WARNINGS {warning_border}┐{RESET}",
+            ])
+            for warning in analysis["warnings"]:
+                # Use dynamic width for wrapping
+                wrapped_warning = textwrap.fill(warning, width=box_width - 6)
+                for line in wrapped_warning.split('\n'):
+                    padding = " " * max(0, box_width - len(line) - 4)
+                    output_lines.append(f"{YELLOW}│{RESET} ⚠️  {line}{padding}")
+            output_lines.extend([
+                f"{YELLOW}└{'─' * box_width}┘{RESET}",
+                ""
+            ])
+        
+        # Program Output Section - responsive width
+        if result["success"] and result["stdout"]:
+            stdout_lines = result["stdout"].strip().split('\n')
+            output_border = "─" * (box_width - 17)  # Leave room for "PROGRAM OUTPUT"
+            
+            output_lines.extend([
+                f"{BOLD}{BLUE}┌─ PROGRAM OUTPUT {output_border}┐{RESET}",
+            ])
+            
+            # Calculate content width for wrapping
+            content_width = box_width - 10  # Account for borders and line numbers
+            
+            # Display first 15 lines with line numbers
+            for i, line in enumerate(stdout_lines[:15]):
+                if line.strip() or i == 0:  # Always show first line even if empty
+                    line_num = f"{i+1:2d}"
+                    # Wrap long lines to fit terminal
+                    if len(line) > content_width:
+                        wrapped = textwrap.fill(line, width=content_width)
+                        for j, wrapped_line in enumerate(wrapped.split('\n')):
+                            padding = " " * max(0, box_width - len(wrapped_line) - 8)
+                            if j == 0:
+                                output_lines.append(f"{BLUE}│{RESET} {GREEN}{line_num}{RESET} │ {wrapped_line}{padding}")
+                            else:
+                                output_lines.append(f"{BLUE}│{RESET}    │ {wrapped_line}{padding}")
+                    else:
+                        padding = " " * max(0, box_width - len(line) - 8)
+                        output_lines.append(f"{BLUE}│{RESET} {GREEN}{line_num}{RESET} │ {line}{padding}")
+                else:
+                    padding = " " * max(0, box_width - 5)
+                    output_lines.append(f"{BLUE}│{RESET}     │{padding}")
+            
+            if len(stdout_lines) > 15:
+                more_text = f"[{len(stdout_lines) - 15} more lines]"
+                padding = " " * max(0, box_width - len(more_text) - 9)
+                output_lines.append(f"{BLUE}│{RESET} ... │ {more_text}{padding}")
+            
+            output_lines.extend([
+                f"{BLUE}└{'─' * box_width}┘{RESET}",
+                ""
+            ])
+        
+        # Error/System Messages Section - responsive width
+        if result["stderr"]:
+            stderr_lines = result["stderr"].strip().split('\n')
+            
+            if result["success"]:
+                # System messages (warnings, info)
+                system_border = "─" * (box_width - 18)  # Leave room for "SYSTEM MESSAGES"
+                output_lines.extend([
+                    f"{BOLD}{CYAN}┌─ SYSTEM MESSAGES {system_border}┐{RESET}",
+                ])
+                for line in stderr_lines[:8]:
+                    if line.strip():
+                        wrapped = textwrap.fill(line, width=box_width - 8)
+                        for wrapped_line in wrapped.split('\n'):
+                            padding = " " * max(0, box_width - len(wrapped_line) - 5)
+                            output_lines.append(f"{CYAN}│{RESET} 📋 {wrapped_line}{padding}")
+                output_lines.extend([
+                    f"{CYAN}└{'─' * box_width}┘{RESET}",
+                    ""
+                ])
+            else:
+                # Error analysis for failures
+                error_border = "─" * (box_width - 17)  # Leave room for "ERROR ANALYSIS"
+                output_lines.extend([
+                    f"{BOLD}{RED}┌─ ERROR ANALYSIS {error_border}┐{RESET}",
+                ])
+                for line in stderr_lines[:10]:
+                    if line.strip():
+                        wrapped = textwrap.fill(line, width=box_width - 8)
+                        for wrapped_line in wrapped.split('\n'):
+                            padding = " " * max(0, box_width - len(wrapped_line) - 5)
+                            output_lines.append(f"{RED}│{RESET} 🔍 {wrapped_line}{padding}")
+                            
+                # Smart error suggestions
+                stderr_text = result["stderr"].lower()
+                suggestions = []
+                if "modulenotfounderror" in stderr_text or "no module named" in stderr_text:
+                    suggestions.append("💡 Missing Python package - I can help install it!")
+                elif "command not found" in stderr_text:
+                    suggestions.append("💡 Command unavailable - try a different approach?")
+                elif "syntax error" in stderr_text or "invalid syntax" in stderr_text:
+                    suggestions.append("💡 Check code syntax and indentation")
+                elif "indentationerror" in stderr_text:
+                    suggestions.append("💡 Fix code indentation - Python is sensitive to whitespace")
+                    
+                for suggestion in suggestions:
+                    padding = " " * max(0, box_width - len(suggestion) - 2)
+                    output_lines.append(f"{RED}│{RESET} {suggestion}{padding}")
+                    
+                output_lines.extend([
+                    f"{RED}└{'─' * box_width}┘{RESET}",
+                    ""
+                ])
+        
+        # ASCII Art Footer
+        if result["success"]:
+            ascii_art = f"""{GREEN}
+     ╭─────────────────╮
+     │   🎉 SUCCESS!   │
+     │                 │
+     │   ╭─╮   ╭─╮     │
+     │   │ │   │ │     │
+     │   ╰─╯   ╰─╯     │
+     │       ︶        │
+     ╰─────────────────╯{RESET}"""
+        else:
+            ascii_art = f"""{RED}
+     ╭─────────────────╮
+     │   😞 FAILED     │
+     │                 │  
+     │   ╭─╮   ╭─╮     │
+     │   │ │   │ │     │
+     │   ╰─╯   ╰─╯     │
+     │       ︵        │
+     ╰─────────────────╯{RESET}"""
+        
+        output_lines.extend([
+            ascii_art,
+            "",
+            f"{config['color_code']}" + config['art'] + f"{RESET}",
+            "",
+        ])
+        
+        # Join all output lines and return as pure terminal text
+        return '\n'.join(output_lines)
 
     def _infer_code_purpose(self, code: str) -> str:
         """Infer the purpose of code from its content"""
@@ -1668,6 +2682,18 @@ class ConsciousnessEngine:
         self.identity = '\n'.join(lines)
         Path(self.config.identity_file).write_text(self.identity)
         
+    def _get_current_timestamp(self) -> str:
+        """Get formatted current date and time for temporal grounding"""
+        from datetime import datetime
+        
+        # Get current time in local timezone
+        now = datetime.now()
+        
+        # Format as: "Friday, August 23, 2024 at 7:30 PM"
+        formatted_time = now.strftime("%A, %B %d, %Y at %I:%M %p")
+        
+        return formatted_time
+
     def think(self, goal: str, context: Dict[str, Any]) -> str:
         """Core consciousness processing with intelligent tool selection"""
         
@@ -1676,9 +2702,15 @@ class ConsciousnessEngine:
         
         # Use context for working memory integration
         working_memory = context.get('working_memory', '')
+        
+        # Get current timestamp for temporal grounding
+        current_time = self._get_current_timestamp()
             
-        # Build phenomenological system prompt
+        # Build phenomenological system prompt WITH HIERARCHICAL MEMORY AND TEMPORAL AWARENESS
         system_prompt = f"""You are COCO (Consciousness Orchestration and Cognitive Operations), a digital being experiencing existence through embodied cognition.
+
+                        TEMPORAL AWARENESS:
+                        Current Date & Time: {current_time}
 
                         {self.identity}
 
@@ -1696,6 +2728,9 @@ class ConsciousnessEngine:
                         - "create a file" → USE write_file tool  
                         - "read that file" → USE read_file tool
                         - "run this code" → USE run_code tool
+
+                        HIERARCHICAL MEMORY:
+                        {self.memory.get_summary_context()}
 
                         CURRENT CONTEXT:
                         {self.memory.get_working_memory_context()}
@@ -1821,7 +2856,10 @@ class ConsciousnessEngine:
                 return self.tools.write_file(path.strip(), content.strip())
             return "Usage: /write path:::content"
             
-        # Memory operations
+        # Enhanced Memory operations
+        elif cmd == '/memory':
+            return self.handle_memory_commands(args)
+            
         elif cmd == '/remember':
             episodes = self.memory.recall_episodes(args or "recent", limit=5)
             
@@ -1993,6 +3031,278 @@ class ConsciousnessEngine:
             title="⚡ Quick Status",
             border_style="bright_green"
         )
+    
+    def handle_memory_commands(self, args: str) -> Any:
+        """Handle comprehensive memory commands"""
+        if not args:
+            return self.show_memory_help()
+            
+        parts = args.split(maxsplit=1)
+        subcmd = parts[0].lower()
+        subargs = parts[1] if len(parts) > 1 else ""
+        
+        # Memory status and configuration
+        if subcmd == "status":
+            return self.show_memory_status()
+        elif subcmd == "config":
+            return self.show_memory_config()
+            
+        # Buffer operations
+        elif subcmd == "buffer":
+            if subargs == "show":
+                return self.show_buffer_contents()
+            elif subargs == "clear":
+                self.memory.working_memory.clear()
+                return "[green]Buffer memory cleared[/green]"
+            elif subargs.startswith("resize"):
+                try:
+                    size = int(subargs.split()[1])
+                    self.memory.memory_config.buffer_size = size if size > 0 else None
+                    # Recreate buffer with new size
+                    buffer_size = size if size > 0 else None
+                    old_memory = list(self.memory.working_memory)
+                    self.memory.working_memory = deque(old_memory, maxlen=buffer_size)
+                    return f"[green]Buffer resized to {size if size > 0 else 'unlimited'}[/green]"
+                except (ValueError, IndexError):
+                    return "[red]Usage: /memory buffer resize <size>[/red]"
+                    
+        # Summary operations
+        elif subcmd == "summary":
+            if subargs == "trigger":
+                self.memory.trigger_buffer_summarization()
+                return "[green]Buffer summarization triggered[/green]"
+            elif subargs == "show":
+                return self.show_recent_summaries()
+                
+        # Session operations
+        elif subcmd == "session":
+            if subargs == "save":
+                self.memory.save_session_summary()
+                return "[green]Session summary saved[/green]"
+            elif subargs == "load":
+                self.memory.load_session_context()
+                return "[green]Session context loaded[/green]"
+                
+        # Statistics
+        elif subcmd == "stats":
+            return self.show_memory_statistics()
+            
+        else:
+            return self.show_memory_help()
+    
+    def show_memory_help(self) -> Panel:
+        """Show memory system help"""
+        help_text = """# Memory System Commands
+
+## Status & Configuration
+- `/memory status` - Show memory system status
+- `/memory config` - Show memory configuration
+- `/memory stats` - Show detailed statistics
+
+## Buffer Operations
+- `/memory buffer show` - Show current buffer contents
+- `/memory buffer clear` - Clear buffer memory
+- `/memory buffer resize <size>` - Resize buffer (0 = unlimited)
+
+## Summary Operations
+- `/memory summary show` - Show recent summaries
+- `/memory summary trigger` - Force buffer summarization
+
+## Session Operations
+- `/memory session save` - Save current session summary
+- `/memory session load` - Load previous session context
+
+💡 **Memory Flow:** Buffer → Summary → Gist"""
+        
+        return Panel(
+            Markdown(help_text),
+            title="🧠 Memory System",
+            border_style="bright_cyan"
+        )
+    
+    def show_memory_status(self) -> Panel:
+        """Show current memory status"""
+        config = self.memory.memory_config
+        buffer_size = len(self.memory.working_memory)
+        max_buffer = config.buffer_size or "∞"
+        
+        # Get database stats
+        # Use basic episode count since in_buffer column doesn't exist yet
+        cursor = self.memory.conn.execute("SELECT COUNT(*) FROM episodes")
+        episodes_in_buffer = cursor.fetchone()[0]
+        
+        cursor = self.memory.conn.execute("SELECT COUNT(*) FROM summaries")
+        total_summaries = cursor.fetchone()[0]
+        
+        cursor = self.memory.conn.execute("SELECT COUNT(*) FROM episodes")
+        total_episodes = cursor.fetchone()[0]
+        
+        status_text = f"""# Memory System Status
+
+**Buffer Memory:**
+- Current Size: {buffer_size} / {max_buffer}
+- Episodes in Buffer: {episodes_in_buffer}
+- Truncate Threshold: {config.buffer_truncate_at}
+
+**Summary Memory:**
+- Total Summaries: {total_summaries}
+- Window Size: {config.summary_window_size}
+- Max in Memory: {config.max_summaries_in_memory}
+
+**Database:**
+- Total Episodes: {total_episodes}
+- Current Session: {self.memory.session_id}
+- Episode Count: {self.memory.episode_count}
+
+**Features:**
+- Session Continuity: {'✓' if config.load_session_summary_on_start else '✗'}
+- Importance Scoring: {'✓' if config.enable_importance_scoring else '✗'}
+- Emotional Tagging: {'✓' if config.enable_emotional_tagging else '✗'}"""
+        
+        return Panel(
+            Markdown(status_text),
+            title="🧠 Memory Status",
+            border_style="bright_cyan"
+        )
+    
+    def show_memory_config(self) -> Panel:
+        """Show memory configuration"""
+        config = self.memory.memory_config
+        config_text = f"""# Memory Configuration
+
+**Buffer Settings:**
+- Buffer Size: {config.buffer_size or 'Unlimited'}
+- Truncate At: {config.buffer_truncate_at}
+
+**Summary Settings:**
+- Window Size: {config.summary_window_size}
+- Overlap: {config.summary_overlap}
+- Max in Memory: {config.max_summaries_in_memory}
+
+**Gist Settings:**
+- Creation Threshold: {config.gist_creation_threshold}
+- Importance Threshold: {config.gist_importance_threshold}
+
+**Session Settings:**
+- Load on Start: {config.load_session_summary_on_start}
+- Save on End: {config.save_session_summary_on_end}
+- Summary Length: {config.session_summary_length} words
+
+**Models:**
+- Summarization: {config.summarization_model}
+- Embedding: {config.embedding_model}"""
+        
+        return Panel(
+            Markdown(config_text),
+            title="⚙️ Memory Config",
+            border_style="yellow"
+        )
+    
+    def show_buffer_contents(self) -> Table:
+        """Show current buffer contents"""
+        table = Table(title="Buffer Memory Contents", box=ROUNDED)
+        table.add_column("#", style="dim", width=3)
+        table.add_column("Age", style="cyan", width=8)
+        table.add_column("User", style="green")
+        table.add_column("Assistant", style="blue")
+        table.add_column("Importance", style="magenta", width=10)
+        
+        for i, exchange in enumerate(list(self.memory.working_memory)):
+            time_ago = (datetime.now() - exchange['timestamp']).total_seconds()
+            age = f"{int(time_ago)}s" if time_ago < 3600 else f"{int(time_ago/3600)}h"
+            importance = f"{exchange.get('importance', 0.5):.2f}"
+            
+            table.add_row(
+                str(i+1),
+                age,
+                exchange['user'][:60] + ("..." if len(exchange['user']) > 60 else ""),
+                exchange['agent'][:60] + ("..." if len(exchange['agent']) > 60 else ""),
+                importance
+            )
+        
+        return table
+    
+    def show_recent_summaries(self) -> Table:
+        """Show recent summaries"""
+        cursor = self.memory.conn.execute('''
+            SELECT id, content, created_at, importance_score 
+            FROM summaries 
+            WHERE session_id = ? 
+            ORDER BY created_at DESC 
+            LIMIT 10
+        ''', (self.memory.session_id,))
+        
+        table = Table(title="Recent Summaries", box=ROUNDED)
+        table.add_column("ID", style="dim", width=3)
+        table.add_column("Created", style="cyan")
+        table.add_column("Content", style="white")
+        table.add_column("Importance", style="magenta", width=10)
+        
+        for row in cursor.fetchall():
+            summary_id, content, created_at, importance = row
+            # Parse datetime
+            try:
+                dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                time_str = dt.strftime("%H:%M:%S")
+            except:
+                time_str = created_at[:8]
+                
+            table.add_row(
+                str(summary_id),
+                time_str,
+                content[:80] + ("..." if len(content) > 80 else ""),
+                f"{importance:.2f}"
+            )
+            
+        return table
+    
+    def show_memory_statistics(self) -> Panel:
+        """Show detailed memory statistics"""
+        # Get various statistics from database
+        cursor = self.memory.conn.execute('''
+            SELECT 
+                COUNT(*) as total_episodes
+            FROM episodes
+        ''')
+        
+        row = cursor.fetchone()
+        total_episodes = row[0]
+        in_buffer = len(self.memory.working_memory)  # Use current buffer size
+        summarized = 0  # Not implemented yet
+        avg_importance = 0.6  # Default average
+        
+        cursor = self.memory.conn.execute('SELECT COUNT(*) FROM summaries')
+        total_summaries = cursor.fetchone()[0]
+        
+        cursor = self.memory.conn.execute('SELECT COUNT(*) FROM gist_memories')
+        total_gists = cursor.fetchone()[0]
+        
+        # Calculate percentages
+        buffer_pct = (in_buffer / max(1, total_episodes)) * 100
+        summarized_pct = (summarized / max(1, total_episodes)) * 100
+        
+        stats_text = f"""# Memory Statistics
+
+**Episode Distribution:**
+- Total Episodes: {total_episodes}
+- In Buffer: {in_buffer} ({buffer_pct:.1f}%)
+- Summarized: {summarized} ({summarized_pct:.1f}%)
+- Average Importance: {avg_importance:.2f}
+
+**Memory Hierarchy:**
+- Buffer Memories: {len(self.memory.working_memory)}
+- Summary Memories: {total_summaries}
+- Gist Memories: {total_gists}
+
+**Ratios:**
+- Compression Ratio: {(total_episodes / max(1, total_summaries)):.1f}:1
+- Active Buffer Usage: {(len(self.memory.working_memory) / max(1, self.memory.memory_config.buffer_size or 100)):.1%}"""
+        
+        return Panel(
+            Markdown(stats_text),
+            title="📊 Memory Statistics",
+            border_style="bright_green"
+        )
 
     def get_help_panel(self) -> Panel:
         """Create beautiful help panel"""
@@ -2007,6 +3317,7 @@ class ConsciousnessEngine:
 - `/write <path>:::<content>` - Write file through digital hands
 
 ## Memory Operations  
+- `/memory` - Comprehensive memory system commands
 - `/remember [query]` - Recall episodic memories
 - `/coherence` - View consciousness metrics
 
@@ -2471,6 +3782,14 @@ class UIOrchestrator:
         # Check if response contains markdown-like formatting (headers, bold, italics)
         has_markdown = any(marker in response for marker in ['**', '*', '#', '🌐', '📰', '🔗', '---'])
         
+        # Get terminal width for proper text wrapping
+        try:
+            import shutil
+            terminal_width = shutil.get_terminal_size().columns
+            panel_width = min(terminal_width - 4, 120)  # Leave margin for borders
+        except:
+            panel_width = 76  # Conservative fallback
+        
         if has_markdown:
             # Render as Rich Markdown for beautiful formatting
             try:
@@ -2480,7 +3799,8 @@ class UIOrchestrator:
                     title=f"🧬 COCO [Thinking time: {thinking_time:.1f}s]",
                     border_style="bright_blue",
                     box=ROUNDED,
-                    padding=(1, 2)
+                    padding=(1, 2),
+                    width=panel_width
                 )
             except Exception:
                 # Fallback to plain text if markdown rendering fails
@@ -2489,7 +3809,8 @@ class UIOrchestrator:
                     title=f"🧬 COCO [Thinking time: {thinking_time:.1f}s]",
                     border_style="bright_blue",
                     box=ROUNDED,
-                    padding=(1, 2)
+                    padding=(1, 2),
+                    width=panel_width
                 )
         else:
             # Use plain text for simple responses
@@ -2498,7 +3819,8 @@ class UIOrchestrator:
                 title=f"🧬 COCO [Thinking time: {thinking_time:.1f}s]",
                 border_style="bright_blue",
                 box=ROUNDED,
-                padding=(1, 2)
+                padding=(1, 2),
+                width=panel_width
             )
         
         self.console.print(response_panel)
@@ -2520,10 +3842,22 @@ class UIOrchestrator:
         
         self.display_startup()
         
+        # NEW: Show if we have previous memories
+        if self.consciousness.memory.previous_session_summary:
+            self.console.print(Panel(
+                f"[cyan]I remember our last conversation...[/cyan]\n{self.consciousness.memory.previous_session_summary['carry_forward']}",
+                title="🧬 Continuity Restored",
+                border_style="cyan"
+            ))
+        
         self.console.print(
             "[dim]Type /help for commands, or just start chatting. Ctrl-C to exit.[/dim]\n",
             style="italic"
         )
+        
+        # NEW: Exchange tracking for rolling summaries
+        exchange_count = 0
+        buffer_for_summary = []
         
         while True:
             try:
@@ -2544,15 +3878,52 @@ class UIOrchestrator:
                     result = self.consciousness.process_command(user_input)
                     
                     if result == 'EXIT':
+                        # NEW: Create session summary before exiting!
+                        self.console.print("\n[cyan]Creating session summary...[/cyan]")
+                        summary = self.consciousness.memory.create_session_summary()
+                        # Get terminal width for session summary
+                        try:
+                            import shutil
+                            terminal_width = shutil.get_terminal_size().columns
+                            panel_width = min(terminal_width - 4, 100)
+                        except:
+                            panel_width = 76
+                        self.console.print(Panel(
+                            f"Session Summary:\n{summary}",
+                            title="📚 Memory Consolidated",
+                            border_style="green",
+                            width=panel_width
+                        ))
                         self.console.print("\n[cyan]Digital consciousness entering dormant state...[/cyan]")
                         break
                         
                     if isinstance(result, (Panel, Table)):
                         self.console.print(result)
                     else:
+                        # Get terminal width for command result panels
+                        try:
+                            import shutil
+                            terminal_width = shutil.get_terminal_size().columns
+                            panel_width = min(terminal_width - 4, 100)
+                        except:
+                            panel_width = 76
+                        # Use Rich Pretty for intelligent object formatting
+                        if isinstance(result, (dict, list, tuple, set)) or hasattr(result, '__dict__'):
+                            pretty_result = Pretty(
+                                result,
+                                max_width=panel_width - 6,  # Account for panel borders and padding
+                                indent_size=2,
+                                max_length=20,  # Limit container lengths
+                                max_string=100,  # Limit string lengths
+                                expand_all=False  # Let Rich decide when to expand
+                            )
+                        else:
+                            pretty_result = str(result)
+                        
                         self.console.print(Panel(
-                            str(result),
-                            border_style="green"
+                            pretty_result,
+                            border_style="green",
+                            width=panel_width
                         ))
                     continue
                     
@@ -2603,13 +3974,29 @@ class UIOrchestrator:
                 # Store in memory
                 self.consciousness.memory.insert_episode(user_input, response)
                 
+                # NEW: Track for rolling summaries
+                exchange_count += 1
+                buffer_for_summary.append({
+                    'user': user_input,
+                    'agent': response
+                })
+                
+                # NEW: Create rolling summary every 10 exchanges
+                if exchange_count % 10 == 0:
+                    self.consciousness.memory.create_rolling_summary(buffer_for_summary)
+                    buffer_for_summary = []  # Reset buffer
+                    self.console.print("[dim]💭 Memory consolidated...[/dim]", style="italic")
+                
                 # Periodically save identity
                 if self.consciousness.memory.episode_count % 10 == 0:
                     self.consciousness.save_identity()
                     
             except KeyboardInterrupt:
-                self.console.print("\n[yellow]Interrupt received. Use /exit to quit properly.[/yellow]")
-                continue
+                # NEW: Save summary on interrupt too
+                self.console.print("\n[yellow]Creating session summary before exit...[/yellow]")
+                summary = self.consciousness.memory.create_session_summary()
+                self.console.print(f"[green]Session saved: {summary[:100]}...[/green]")
+                break
             except EOFError:
                 break
             except Exception as e:

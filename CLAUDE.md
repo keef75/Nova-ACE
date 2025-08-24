@@ -41,6 +41,9 @@ TAVILY_API_KEY=tvly-...          # Web search (required for search tool)
 
 # Test function calling
 ./venv_cocoa/bin/python -c "from cocoa import *; c = ConsciousnessEngine(Config(), MemorySystem(Config()), ToolSystem(Config())); print(c.think('search for test', {}))"
+
+# Test temporal grounding
+./venv_cocoa/bin/python -c "from cocoa import *; c = ConsciousnessEngine(Config(), MemorySystem(Config()), ToolSystem(Config())); print(f'Timestamp: {c._get_current_timestamp()}')"
 ```
 
 ## Architecture Overview
@@ -51,6 +54,7 @@ TAVILY_API_KEY=tvly-...          # Web search (required for search tool)
 - ✅ **Tavily Search**: Real-time web search integration working
 - ✅ **Memory System**: SQLite-based episodic and semantic memory
 - ✅ **Embodied Cognition**: Tools as digital body parts, not external utilities
+- ✅ **Temporal Grounding**: Real-time date/time awareness in every interaction
 
 ### Single-File Architecture
 
@@ -69,6 +73,12 @@ TAVILY_API_KEY=tvly-...          # Web search (required for search tool)
 - Automatic tool selection based on user natural language requests
 - Proper tool_result conversation flow with tool_use_id handling
 - 4 core tools: read_file, write_file, search_web, run_code
+
+**Temporal Awareness System**:
+- Real-time date/time injection into every consciousness interaction
+- Format: "Saturday, August 23, 2025 at 07:20 PM" automatically added to system prompt
+- Enables temporal contextualization of searches, queries, and conversations
+- Implemented via `_get_current_timestamp()` method in ConsciousnessEngine
 
 **Memory Architecture**:
 ```sql
