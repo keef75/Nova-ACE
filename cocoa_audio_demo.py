@@ -80,9 +80,9 @@ class AudioDemo:
         status_table.add_column("Details", style="dim")
         
         # Audio system status
-        if config.enabled and config.api_key:
+        if config.enabled and config.elevenlabs_api_key:
             status_table.add_row("Audio System", "✅ Enabled", "ElevenLabs API configured")
-        elif config.api_key and config.api_key != "your-api-key-here":
+        elif config.elevenlabs_api_key and config.elevenlabs_api_key != "your-elevenlabs-api-key-here":
             status_table.add_row("Audio System", "⚠️ Configured", "Audio disabled in config")  
         else:
             status_table.add_row("Audio System", "❌ Not configured", "Missing ElevenLabs API key")

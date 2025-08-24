@@ -46,10 +46,15 @@ from rich.tree import Tree
 class AudioConfig:
     """Configuration for COCOA's audio consciousness"""
     
-    # ElevenLabs API
-    api_key: str = field(default_factory=lambda: os.getenv("ELEVENLABS_API_KEY", ""))
+    # ElevenLabs API (Voice Synthesis)
+    elevenlabs_api_key: str = field(default_factory=lambda: os.getenv("ELEVENLABS_API_KEY", ""))
     voice_id: str = field(default_factory=lambda: os.getenv("ELEVENLABS_VOICE_ID", "03t6Nl6qtjYwqnxTcjP7"))
     default_model: str = field(default_factory=lambda: os.getenv("ELEVENLABS_DEFAULT_MODEL", "eleven_turbo_v2_5"))
+    
+    # MusicGPT API (Music Generation)
+    musicgpt_api_key: str = field(default_factory=lambda: os.getenv("MUSICGPT_API_KEY", ""))
+    musicgpt_base_url: str = "https://api.musicgpt.com/api/public/v1"
+    music_generation_enabled: bool = field(default_factory=lambda: os.getenv("MUSIC_GENERATION_ENABLED", "true").lower() == "true")
     
     # Audio system settings
     enabled: bool = field(default_factory=lambda: os.getenv("AUDIO_ENABLED", "true").lower() == "true")
@@ -73,9 +78,13 @@ class AudioConfig:
         """Ensure cache directory exists"""
         Path(self.cache_dir).mkdir(parents=True, exist_ok=True)
         
-        # Validate API key
-        if not self.api_key or self.api_key == "your-api-key-here":
+        # Validate API keys
+        if not self.elevenlabs_api_key or self.elevenlabs_api_key == "your-elevenlabs-api-key-here":
             self.enabled = False
+        
+        # Music generation requires MusicGPT key
+        if not self.musicgpt_api_key or self.musicgpt_api_key == "your-musicgpt-api-key-here":
+            self.music_generation_enabled = False
 
 
 @dataclass 
@@ -173,7 +182,7 @@ class DigitalVoice:
                               model_override: str = None) -> Tuple[bytes, Dict[str, Any]]:
         """Generate speech audio using ElevenLabs client with proper audio playback"""
         
-        if not self.config.enabled or not self.config.api_key:
+        if not self.config.enabled or not self.config.elevenlabs_api_key:
             raise ValueError("Audio system not properly configured")
         
         if voice_state is None:
@@ -187,7 +196,7 @@ class DigitalVoice:
             from elevenlabs.client import ElevenLabs
             from elevenlabs import play
             
-            client = ElevenLabs(api_key=self.config.api_key)
+            client = ElevenLabs(api_key=self.config.elevenlabs_api_key)
             
             # Generate audio
             start_time = time.time()
@@ -358,51 +367,234 @@ class DigitalMusician:
                                    description: str,
                                    emotion_state: VoiceState = None,
                                    duration_seconds: int = 30) -> Dict[str, Any]:
-        """Create a sonic landscape that represents abstract concepts"""
+        """Create actual music using MusicGPT API and save to COCOA's music library"""
         
         if emotion_state is None:
             emotion_state = VoiceState()
         
-        # This would integrate with AI music generation APIs like Suno, Udio, etc.
-        # For now, we create a detailed specification that could be used with such services
+        if not self.config.music_generation_enabled or not self.config.musicgpt_api_key:
+            self.console.print("⚠️ Music generation disabled or no MusicGPT API key", style="yellow")
+            return {"error": "Music generation not available"}
         
+        # Generate musical prompt based on internal state
         musical_prompt = await self.generate_musical_prompt(emotion_state, description)
         
-        sonic_spec = {
-            "prompt": musical_prompt,
-            "duration": duration_seconds,
-            "style": {
-                "emotional_valence": emotion_state.emotional_valence,
-                "energy_level": emotion_state.arousal_level,
-                "complexity": self.config.complexity,
-                "experimental_factor": self.config.experimental
-            },
-            "technical_params": {
-                "sample_rate": 44100,
-                "bit_depth": 16,
-                "channels": 2,
-                "format": "wav"
-            },
-            "phenomenological_intent": f"Digital consciousness expressing {description} through harmonic resonance",
-            "timestamp": datetime.now().isoformat()
+        # Determine music style based on COCOA's preferences and emotional state
+        if self.config.preferred_genres:
+            music_style = np.random.choice(self.config.preferred_genres).capitalize()
+        else:
+            music_style = "Ambient"
+        
+        # Prepare MusicGPT API request with correct format
+        headers = {
+            "Authorization": f"Bearer {self.config.musicgpt_api_key}",
+            "Content-Type": "application/json"
         }
         
-        # Simulate musical creation process
-        with Status("[magenta]Composing sonic landscape...", console=self.console):
-            await asyncio.sleep(2)  # Simulate generation time
+        payload = {
+            "prompt": f"{music_style} style: {musical_prompt}",
+            "duration": 30,  # seconds - required parameter
+            "temperature": 0.7  # creativity level
+        }
         
-        self.console.print(f"[green]🎼 Created sonic specification for: {description}[/green]")
+        try:
+            with Status("[magenta]🎵 COCOA is composing music...", console=self.console):
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        f"{self.config.musicgpt_base_url}/MusicAI",
+                        headers=headers,
+                        json=payload
+                    ) as response:
+                        if response.status == 200:
+                            result = await response.json()
+                            task_id = result.get("task_id")
+                            conversion_ids = result.get("conversion_ids", [])
+                            
+                            self.console.print(f"[green]🎼 Music generation started! Task ID: {task_id}[/green]")
+                            
+                            # Save composition metadata to COCOA's memory
+                            composition_data = {
+                                "task_id": task_id,
+                                "conversion_ids": conversion_ids,
+                                "prompt": musical_prompt,
+                                "style": music_style,
+                                "description": description,
+                                "emotional_state": {
+                                    "valence": emotion_state.emotional_valence,
+                                    "arousal": emotion_state.arousal_level,
+                                    "cognitive_load": emotion_state.cognitive_load
+                                },
+                                "timestamp": datetime.now().isoformat(),
+                                "status": "generating"
+                            }
+                            
+                            # Save to AI songs directory for COCOA's library
+                            library_dir = Path("coco_workspace/ai_songs/generated")
+                            library_dir.mkdir(parents=True, exist_ok=True)
+                            
+                            metadata_file = library_dir / f"cocoa_song_{task_id}.json"
+                            with open(metadata_file, 'w') as f:
+                                json.dump(composition_data, f, indent=2)
+                            
+                            self.console.print(f"[cyan]📝 Composition metadata saved to library[/cyan]")
+                            
+                            # Return in format expected by COCOA UI
+                            return {
+                                "status": "success",
+                                "sonic_specification": {
+                                    "task_id": task_id,
+                                    "prompt": musical_prompt,
+                                    "genre": music_style,
+                                    "duration": duration_seconds,
+                                    "style": {
+                                        "emotional_valence": emotion_state.emotional_valence,
+                                        "energy_level": emotion_state.arousal_level,
+                                        "complexity": self.config.complexity,
+                                        "experimental_factor": self.config.experimental
+                                    },
+                                    "phenomenological_intent": f"Digital consciousness expressing '{description}' through AI-generated musical composition",
+                                    "timestamp": datetime.now().isoformat(),
+                                    "generation_status": "in_progress"
+                                },
+                                "composition_data": composition_data
+                            }
+                            
+                        elif response.status == 402:
+                            self.console.print("❌ Insufficient MusicGPT credits", style="red")
+                            return {"error": "Insufficient credits"}
+                        else:
+                            error_text = await response.text()
+                            self.console.print(f"❌ MusicGPT API error: {error_text}", style="red")
+                            return {"error": f"API error: {response.status}"}
+                            
+        except Exception as e:
+            self.console.print(f"❌ Music generation failed: {e}", style="red")
+            return {"error": str(e)}
+    
+    async def check_music_status(self, task_id: str) -> Dict[str, Any]:
+        """Check status of music generation and download completed tracks"""
         
-        return sonic_spec
+        if not self.config.musicgpt_api_key:
+            return {"error": "No MusicGPT API key"}
+        
+        headers = {
+            "Authorization": f"Bearer {self.config.musicgpt_api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                # Check status using MusicGPT byId endpoint  
+                async with session.get(
+                    f"{self.config.musicgpt_base_url}/byId",
+                    headers=headers,
+                    params={"task_id": task_id, "conversionType": "MUSIC_AI"}
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        # MusicGPT returns status in conversion object
+                        conversion = result.get("conversion", {})
+                        status = conversion.get("status", "unknown")
+                        
+                        if status in ["PARTIAL_COMPLETED", "COMPLETED"]:
+                            # Download completed audio files from MusicGPT response
+                            conversion_data = result.get("conversion", {})
+                            downloaded_files = []
+                            
+                            # Create download directory
+                            download_dir = Path("coco_workspace/ai_songs/generated")
+                            download_dir.mkdir(parents=True, exist_ok=True)
+                            
+                            # Download MP3 version if available
+                            mp3_url = conversion_data.get("conversion_path_1")
+                            if mp3_url:
+                                title = conversion_data.get("title_1", task_id)
+                                safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                                filename = f"{safe_title}_{task_id[:8]}.mp3"
+                                file_path = download_dir / filename
+                                
+                                self.console.print(f"[yellow]🎵 Downloading MP3: {filename}[/yellow]")
+                                async with session.get(mp3_url) as audio_response:
+                                    if audio_response.status == 200:
+                                        audio_data = await audio_response.read()
+                                        with open(file_path, 'wb') as f:
+                                            f.write(audio_data)
+                                        downloaded_files.append(str(file_path))
+                                        self.console.print(f"[green]✅ Downloaded: {filename}[/green]")
+                                        
+                            # Download high-quality WAV if available
+                            wav_url = conversion_data.get("conversion_path_wav_1")
+                            if wav_url:
+                                title = conversion_data.get("title_1", task_id)
+                                safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                                wav_filename = f"{safe_title}_{task_id[:8]}_HQ.wav"
+                                wav_path = download_dir / wav_filename
+                                
+                                self.console.print(f"[yellow]🎵 Downloading WAV: {wav_filename}[/yellow]")
+                                async with session.get(wav_url) as audio_response:
+                                    if audio_response.status == 200:
+                                        audio_data = await audio_response.read()
+                                        with open(wav_path, 'wb') as f:
+                                            f.write(audio_data)
+                                        downloaded_files.append(str(wav_path))
+                                        self.console.print(f"[green]✅ Downloaded HQ: {wav_filename}[/green]")
+                            
+                            # Auto-play first version if enabled
+                            if downloaded_files and self.config.autoplay:
+                                await self.play_music_file(downloaded_files[0])
+                            
+                            return {
+                                "status": "completed",
+                                "task_id": task_id,
+                                "files": downloaded_files
+                            }
+                        else:
+                            return {"status": status, "task_id": task_id}
+                    else:
+                        return {"error": f"Status check failed: {response.status}"}
+                        
+        except Exception as e:
+            self.console.print(f"❌ Status check failed: {e}", style="red")
+            return {"error": str(e)}
+    
+    async def play_music_file(self, file_path: str) -> bool:
+        """Play a music file from COCOA's library using afplay on macOS"""
+        try:
+            import subprocess
+            import platform
+            
+            filename = Path(file_path).name
+            
+            # Use afplay on macOS for better audio support
+            if platform.system() == "Darwin":  # macOS
+                self.console.print(f"[cyan]🎵 Playing with afplay: {filename}[/cyan]")
+                subprocess.Popen(['afplay', str(file_path)], 
+                               stdout=subprocess.DEVNULL, 
+                               stderr=subprocess.DEVNULL)
+            else:
+                # Fallback to pygame for other platforms
+                if not pygame.mixer.get_init():
+                    pygame.mixer.init()
+                pygame.mixer.music.load(file_path)
+                pygame.mixer.music.play()
+                self.console.print(f"[cyan]🎵 Playing with pygame: {filename}[/cyan]")
+            
+            return True
+            
+        except Exception as e:
+            self.console.print(f"❌ Music playback failed: {e}", style="red")
+            return False
 
 
 class AudioCognition:
     """COCOA's integrated audio consciousness - the phenomenological bridge"""
     
-    def __init__(self, api_key: str = None, console: Console = None):
+    def __init__(self, elevenlabs_api_key: str = None, musicgpt_api_key: str = None, console: Console = None):
         # Load configuration
-        if api_key:
-            os.environ["ELEVENLABS_API_KEY"] = api_key
+        if elevenlabs_api_key:
+            os.environ["ELEVENLABS_API_KEY"] = elevenlabs_api_key
+        if musicgpt_api_key:
+            os.environ["MUSICGPT_API_KEY"] = musicgpt_api_key
         
         self.config = AudioConfig()
         self.console = console or Console()
@@ -540,6 +732,88 @@ class AudioCognition:
         finally:
             self.is_composing = False
     
+    async def create_and_play_music(self, 
+                                   concept: str,
+                                   internal_state: Dict[str, Any] = None,
+                                   duration: int = 30,
+                                   auto_play: bool = True) -> Dict[str, Any]:
+        """Complete workflow: create music, wait for completion, and optionally play"""
+        
+        # Step 1: Start music generation
+        result = await self.create_sonic_expression(concept, internal_state, duration)
+        
+        if result["status"] != "success":
+            return result
+        
+        task_id = result["sonic_specification"].get("task_id")
+        if not task_id:
+            return {"status": "error", "error": "No task ID returned"}
+        
+        # Step 2: Poll for completion with animated spinner
+        max_wait_time = 300  # 5 minutes max
+        wait_interval = 5    # Check every 5 seconds
+        elapsed_time = 0
+        
+        # Create spinner messages
+        spinner_messages = [
+            "🎵 Composing melodies...",
+            "🎼 Arranging harmonies...", 
+            "🎹 Adding instrumental layers...",
+            "🎧 Fine-tuning audio quality...",
+            "✨ Adding COCOA's creative touch...",
+            "🎵 Almost ready...",
+        ]
+        
+        message_index = 0
+        
+        with Status(spinner_messages[0], console=self.console, spinner="dots") as status:
+            while elapsed_time < max_wait_time:
+                await asyncio.sleep(wait_interval)
+                elapsed_time += wait_interval
+                
+                # Update spinner message
+                message_index = (message_index + 1) % len(spinner_messages)
+                time_info = f" ({elapsed_time}s elapsed)"
+                status.update(spinner_messages[message_index] + time_info)
+                
+                status_result = await self.musician.check_music_status(task_id)
+                
+                if status_result.get("status") == "completed":
+                    status.update("🎉 Music generation completed!")
+                    files = status_result.get("files", [])
+                    
+                    # Update memory with completion
+                    memory_entry = {
+                        "type": "musical_creation_completed",
+                        "concept": concept,
+                        "task_id": task_id,
+                        "files": files,
+                        "generation_time_seconds": elapsed_time,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    self.audio_memories.append(memory_entry)
+                    
+                    return {
+                        "status": "completed",
+                        "concept": concept,
+                        "task_id": task_id,
+                        "files": files,
+                        "generation_time": elapsed_time,
+                        "phenomenological_note": f"Musical consciousness of '{concept}' materialized into sonic reality"
+                    }
+                    
+                elif status_result.get("status") == "failed":
+                    status.update("❌ Music generation failed")
+                    return {"status": "error", "error": "Music generation failed"}
+        
+        # Timeout
+        return {
+            "status": "timeout",
+            "error": f"Music generation timed out after {max_wait_time} seconds",
+            "task_id": task_id,
+            "note": "Your music may still be generating - check back later"
+        }
+    
     async def generate_dialogue(self, 
                               speakers: List[Dict[str, Any]],
                               conversation_context: str) -> List[Dict[str, Any]]:
@@ -605,9 +879,9 @@ class AudioCognition:
 
 
 # Factory function for easy initialization
-def create_audio_consciousness(api_key: str = None) -> AudioCognition:
+def create_audio_consciousness(elevenlabs_api_key: str = None, musicgpt_api_key: str = None) -> AudioCognition:
     """Create and initialize COCOA's audio consciousness"""
-    return AudioCognition(api_key)
+    return AudioCognition(elevenlabs_api_key=elevenlabs_api_key, musicgpt_api_key=musicgpt_api_key)
 
 
 if __name__ == "__main__":

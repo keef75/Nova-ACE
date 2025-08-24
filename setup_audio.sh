@@ -59,10 +59,14 @@ else
     cat >> .env << 'EOF'
 
 # ===== AUDIO CONFIGURATION =====
-# ElevenLabs API Configuration
-ELEVENLABS_API_KEY=your-api-key-here
+# ElevenLabs API Configuration (Voice Synthesis)
+ELEVENLABS_API_KEY=your-elevenlabs-api-key-here
 ELEVENLABS_VOICE_ID=03t6Nl6qtjYwqnxTcjP7
 ELEVENLABS_DEFAULT_MODEL=eleven_turbo_v2_5
+
+# MusicGPT API Configuration (Music Generation)
+MUSICGPT_API_KEY=your-musicgpt-api-key-here
+MUSIC_GENERATION_ENABLED=true
 
 # Audio Settings
 AUDIO_ENABLED=true
@@ -104,12 +108,13 @@ python3 -c "import aiohttp; print('✓ aiohttp OK')" 2>/dev/null || echo -e "${R
 python3 -c "import pygame; print('✓ pygame OK')" 2>/dev/null || echo -e "${RED}✗ pygame failed${NC}"
 python3 -c "import numpy; print('✓ numpy OK')" 2>/dev/null || echo -e "${RED}✗ numpy failed${NC}"
 
-# Check API key
-if grep -q "your-api-key-here" .env; then
+# Check API keys
+if grep -q "your-elevenlabs-api-key-here\|your-musicgpt-api-key-here" .env; then
     echo ""
-    echo -e "${YELLOW}⚠️  IMPORTANT: Add your ElevenLabs API key to .env${NC}"
-    echo "1. Get your API key from: https://elevenlabs.io"
-    echo "2. Edit .env and replace 'your-api-key-here' with your actual key"
+    echo -e "${YELLOW}⚠️  IMPORTANT: Add your API keys to .env${NC}"
+    echo "1. Get ElevenLabs API key from: https://elevenlabs.io"
+    echo "2. Get MusicGPT API key from: https://musicgpt.com"
+    echo "3. Edit .env and replace placeholder keys with your actual keys"
     echo ""
 fi
 
@@ -124,13 +129,19 @@ from dotenv import load_dotenv
 load_dotenv()
 
 async def quick_test():
-    api_key = os.getenv("ELEVENLABS_API_KEY")
+    elevenlabs_key = os.getenv("ELEVENLABS_API_KEY")
+    musicgpt_key = os.getenv("MUSICGPT_API_KEY")
     
-    if not api_key or api_key == "your-api-key-here":
+    if not elevenlabs_key or elevenlabs_key == "your-elevenlabs-api-key-here":
         print("❌ Please add your ElevenLabs API key to .env first!")
         return
+        
+    if not musicgpt_key or musicgpt_key == "your-musicgpt-api-key-here":
+        print("⚠️ MusicGPT API key not found - music generation will be disabled")
+        print("✅ Voice synthesis available with ElevenLabs")
+    else:
+        print("✅ Both API keys found!")
     
-    print("✅ API key found!")
     print("\nTesting basic imports...")
     
     try:
@@ -138,8 +149,11 @@ async def quick_test():
         print("✅ Audio system imports successfully!")
         
         # Initialize
-        audio = AudioCognition(api_key)
+        audio = AudioCognition(elevenlabs_key, musicgpt_key)
         print("✅ Audio cognition initialized!")
+        
+        if musicgpt_key and musicgpt_key != "your-musicgpt-api-key-here":
+            print("🎵 Music generation ready!")
         
         print("\n✨ All tests passed! Audio system is ready.")
         

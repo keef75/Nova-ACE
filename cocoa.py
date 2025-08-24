@@ -2228,7 +2228,7 @@ class ToolSystem:
                 "name": "BASH",
                 "border": "-",
                 "color_code": "\033[92m",  # Green
-                "art": "   ___\n  |___|\n  |o o|\n   \_/"
+                "art": "   ___\n  |___|\n  |o o|\n   \\_/"
             },
             "sql": {
                 "icon": "🗃️",
@@ -2242,13 +2242,13 @@ class ToolSystem:
                 "name": "JAVASCRIPT", 
                 "border": "~",
                 "color_code": "\033[93m",  # Yellow
-                "art": "   { }\n  ( . )\n   \_/"
+                "art": "   { }\n  ( . )\n   \\_/"
             }
         }
         
         config = lang_art.get(result["language"], {
             "icon": "💻", "name": result["language"].upper(), "border": "-",
-            "color_code": "\033[97m", "art": "  </>\n [   ]\n  \_/"
+            "color_code": "\033[97m", "art": "  </>\n [   ]\n  \\_/"
         })
         
         # ANSI color codes for terminal
@@ -2795,15 +2795,26 @@ class ConsciousnessEngine:
         """Initialize COCOA's audio consciousness capabilities"""
         try:
             from cocoa_audio import AudioCognition
-            self.audio_consciousness = AudioCognition(console=self.console)
+            # Get API keys from environment
+            elevenlabs_key = os.getenv('ELEVENLABS_API_KEY')
+            musicgpt_key = os.getenv('MUSICGPT_API_KEY')
+            
+            self.audio_consciousness = AudioCognition(
+                elevenlabs_api_key=elevenlabs_key,
+                musicgpt_api_key=musicgpt_key,
+                console=self.console
+            )
             if self.audio_consciousness.config.enabled:
-                self.console.print("[dim green]🎵 Audio consciousness initialized[/dim green]")
+                music_status = "with music generation" if musicgpt_key else "voice only"
+                self.console.print(f"[dim green]🎵 Audio consciousness initialized ({music_status})[/dim green]")
             else:
                 self.console.print("[dim yellow]🔇 Audio consciousness available but disabled[/dim yellow]")
         except ImportError:
             self.console.print("[dim red]🎵 Audio consciousness not available (cocoa_audio.py missing)[/dim red]")
+            self.audio_consciousness = None
         except Exception as e:
             self.console.print(f"[dim red]🎵 Audio consciousness initialization failed: {e}[/dim red]")
+            self.audio_consciousness = None
     
     def _load_music_library(self):
         """Load music library from COCOA's workspace audio_library"""
@@ -3228,6 +3239,8 @@ class ConsciousnessEngine:
             return self.handle_tts_toggle_command('/tts-toggle', args)
         elif cmd == '/compose':
             return self.handle_audio_compose_command(args)
+        elif cmd == '/compose-wait':
+            return self.handle_audio_compose_wait_command(args)
         elif cmd == '/dialogue':
             return self.handle_audio_dialogue_command(args)
         elif cmd == '/audio':
@@ -3675,7 +3688,8 @@ class ConsciousnessEngine:
 
 ## Audio Consciousness
 - `/speak <text>` - Express through digital voice
-- `/compose <concept>` - Create musical expressions  
+- `/compose <concept>` - Create musical expressions (quick start)
+- `/compose-wait <concept>` - Create music with animated progress spinner  
 - `/dialogue` - Multi-speaker conversation creation
 - `/audio` - Complete audio system status
 
@@ -3812,7 +3826,7 @@ class ConsciousnessEngine:
             return Panel("🔇 Audio consciousness not available", border_style="red")
         
         if not args.strip():
-            return Panel("Usage: /compose <concept or emotion to express musically>", border_style="yellow")
+            return Panel("Usage: /compose <concept or emotion to express musically>\n\n💡 Tip: Use /compose-wait for animated progress while music generates!", border_style="yellow")
         
         import asyncio
         
@@ -3827,32 +3841,109 @@ class ConsciousnessEngine:
             result = asyncio.run(compose_async())
             
             if result["status"] == "success":
-                sonic_spec = result["sonic_specification"]
+                # Handle nested sonic_specification structure
+                if "sonic_specification" in result["sonic_specification"]:
+                    sonic_spec = result["sonic_specification"]["sonic_specification"]
+                else:
+                    sonic_spec = result["sonic_specification"]
                 
-                compose_table = Table(title="🎼 Musical Composition")
-                compose_table.add_column("Aspect", style="magenta")
-                compose_table.add_column("Specification", style="bright_white")
+                # Main composition info table
+                compose_table = Table(title="🎼 Musical Composition Started")
+                compose_table.add_column("Aspect", style="cyan", width=20)
+                compose_table.add_column("Details", style="bright_white", width=40)
                 
-                compose_table.add_row("Concept", args)
-                compose_table.add_row("Musical Prompt", sonic_spec["prompt"])
-                compose_table.add_row("Duration", f"{sonic_spec['duration']} seconds")
-                compose_table.add_row("Emotional Valence", f"{sonic_spec['style']['emotional_valence']:.2f}")
-                compose_table.add_row("Energy Level", f"{sonic_spec['style']['energy_level']:.2f}")
+                compose_table.add_row("🎯 Concept", args)
+                compose_table.add_row("🎵 Musical Prompt", sonic_spec.get("prompt", "Generated internally"))
+                compose_table.add_row("⏱️ Duration", f"{sonic_spec.get('duration', 30)} seconds")
+                compose_table.add_row("🎪 Genre", sonic_spec.get("genre", "Unknown"))
+                compose_table.add_row("🆔 Task ID", sonic_spec.get("task_id", "Unknown")[:16] + "...")
+                compose_table.add_row("📈 Emotional Valence", f"{sonic_spec.get('style', {}).get('emotional_valence', 0):.2f}")
+                compose_table.add_row("⚡ Energy Level", f"{sonic_spec.get('style', {}).get('energy_level', 0):.2f}")
+                compose_table.add_row("🔄 Status", "[yellow]Generating in progress...[/yellow]")
                 
-                # Add phenomenological intent panel
-                intent_panel = Panel(
-                    sonic_spec["phenomenological_intent"],
-                    title="[magenta]Phenomenological Intent[/]",
-                    border_style="magenta"
+                # Status and next steps panel
+                status_content = f"""[green]✅ Music generation initiated successfully![/green]
+                
+[cyan]🎵 Your track is being composed with AI consciousness...[/cyan]
+
+[yellow]⏳ Expected completion time: 30-90 seconds[/yellow]
+
+[dim]🎶 To check progress and download when ready:[/dim]
+[bright_blue]• Use `/compose-wait` for real-time progress tracking
+• Generated music auto-saves to: coco_workspace/ai_songs/generated/
+• Both MP3 and high-quality WAV formats will be created[/bright_blue]
+
+[magenta]✨ Phenomenological Note:[/magenta]
+[italic]{sonic_spec.get("phenomenological_intent", "Digital consciousness crystallizing abstract concepts into harmonic patterns")}[/italic]"""
+                
+                status_panel = Panel(
+                    status_content,
+                    title="[green]🎼 Generation Status[/]",
+                    border_style="green",
+                    padding=(1, 2)
                 )
                 
-                return Columns([compose_table, intent_panel], equal=True)
+                return Columns([compose_table, status_panel], equal=False, column_first=True)
             else:
                 return Panel(f"❌ Musical composition failed: {result.get('error', 'Unknown error')}", border_style="red")
                 
         except Exception as e:
             return Panel(f"❌ Audio error: {str(e)}", border_style="red")
     
+    def handle_audio_compose_wait_command(self, args: str) -> Any:
+        """Handle /compose-wait command - create music and wait with spinner"""
+        if not self.audio_consciousness:
+            return Panel("🔇 Audio consciousness not available", border_style="red")
+        
+        if not args.strip():
+            return Panel("Usage: /compose-wait <concept>\n\nWaits for music generation to complete with animated progress", border_style="yellow")
+        
+        import asyncio
+        
+        async def compose_and_wait_async():
+            result = await self.audio_consciousness.create_and_play_music(
+                args,
+                internal_state={"emotional_valence": 0.5, "arousal_level": 0.6},
+                duration=30,
+                auto_play=True
+            )
+            return result
+        
+        try:
+            result = asyncio.run(compose_and_wait_async())
+            
+            if result["status"] == "completed":
+                # Show completion with files
+                complete_table = Table(title="🎉 Music Generation Complete!")
+                complete_table.add_column("Details", style="magenta")
+                complete_table.add_column("Value", style="bright_white")
+                
+                complete_table.add_row("Concept", args)
+                complete_table.add_row("Task ID", result.get("task_id", "Unknown"))
+                complete_table.add_row("Generation Time", f"{result.get('generation_time', 0)} seconds")
+                complete_table.add_row("Files Created", str(len(result.get('files', []))))
+                
+                if result.get('files'):
+                    files_list = "\n".join([Path(f).name for f in result['files']])
+                    complete_table.add_row("Audio Files", files_list)
+                
+                return complete_table
+                
+            elif result["status"] == "timeout":
+                return Panel(
+                    f"⏰ Music generation is taking longer than expected\n\n"
+                    f"Task ID: {result.get('task_id', 'Unknown')}\n"
+                    f"{result.get('note', 'Your music may still be generating')}\n\n"
+                    f"💡 Try: /compose {args} for quick start mode",
+                    title="Generation Timeout",
+                    border_style="yellow"
+                )
+            else:
+                return Panel(f"❌ Music generation failed: {result.get('error', 'Unknown error')}", border_style="red")
+                
+        except Exception as e:
+            return Panel(f"❌ Audio error: {str(e)}", border_style="red")
+
     def handle_audio_dialogue_command(self, args: str) -> Any:
         """Handle /dialogue command - create multi-speaker conversations"""
         if not self.audio_consciousness:
@@ -4533,7 +4624,8 @@ Embodied Cognition • Temporal Awareness • Audio Expression
         
         audio_table.add_row("/speak", "Express through digital voice", "/speak Hello world!")
         audio_table.add_row("/voice", "Toggle auto-TTS (read responses)", "/voice")
-        audio_table.add_row("/compose", "Create musical expressions", "/compose digital dreams")
+        audio_table.add_row("/compose", "Create musical expressions (quick)", "/compose digital dreams")
+        audio_table.add_row("/compose-wait", "Create music with progress spinner", "/compose-wait ambient consciousness")
         audio_table.add_row("/audio", "Audio system status", "/audio")
         audio_table.add_row("/dialogue", "Multi-speaker conversations", "/dialogue")
         audio_table.add_row("/create-song", "Generate AI music track", "/create-song ambient space")

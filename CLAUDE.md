@@ -29,7 +29,9 @@ source venv_cocoa/bin/activate
 ANTHROPIC_API_KEY=sk-ant-...     # Primary reasoning (required)
 OPENAI_API_KEY=sk-proj-...       # Embeddings (optional) 
 TAVILY_API_KEY=tvly-...          # Web search (required for search tool)
-ELEVENLABS_API_KEY=your-api-key-here  # Voice synthesis (get from https://elevenlabs.io)
+ELEVENLABS_API_KEY=your-api-key-here   # Voice synthesis (get from https://elevenlabs.io)
+MUSICGPT_API_KEY=your-api-key-here     # AI music generation (get from https://musicgpt.com)
+MUSIC_GENERATION_ENABLED=true         # Enable/disable music generation features
 ```
 
 ### Audio System Setup
@@ -37,13 +39,23 @@ ELEVENLABS_API_KEY=your-api-key-here  # Voice synthesis (get from https://eleven
 # Install audio dependencies and configure environment
 ./setup_audio.sh
 
-# IMPORTANT: Add your real ElevenLabs API key to .env file
-# 1. Get API key from: https://elevenlabs.io
-# 2. Replace 'your-api-key-here' in .env with actual key
-# 3. Audio features (startup music, /speak, /compose) require valid key
+# IMPORTANT: Add your real API keys to .env file
+# 1. Get ElevenLabs API key from: https://elevenlabs.io (for voice synthesis)
+# 2. Get MusicGPT API key from: https://musicgpt.com (for music generation)
+# 3. Replace placeholder keys in .env with actual keys
+# 4. Audio features (startup music, /speak, /compose) require valid keys
 
-# Test audio system (requires valid API key)
+# Test audio system (requires valid API keys)
 ./venv_cocoa/bin/python test_audio_quick.py
+
+# Test music generation specifically (requires MusicGPT API key)
+./venv_cocoa/bin/python test_music_generation.py
+
+# Test spinner system for music generation UX
+./venv_cocoa/bin/python test_spinner.py
+
+# Check music generation status and download files
+./venv_cocoa/bin/python check_music_status.py
 
 # Clear audio cache if having issues
 rm -rf ~/.cocoa/audio_cache
@@ -61,7 +73,7 @@ rm coco_workspace/shutdown_music_library.json
 # Run main application  
 ./venv_cocoa/bin/python cocoa.py
 
-# Alternative: Use launch script
+# Alternative: Use launch script (with system checks and dependency validation)
 ./launch.sh
 
 # Interactive audio demo (requires ElevenLabs API key)
@@ -70,6 +82,12 @@ rm coco_workspace/shutdown_music_library.json
 # Component testing (when debugging)
 ./venv_cocoa/bin/python -c "from cocoa import *; tools = ToolSystem(Config()); print('Tools ready')"
 ./venv_cocoa/bin/python -c "from cocoa import *; memory = MemorySystem(Config()); print(f'Episodes: {memory.episode_count}')"
+
+# Launch script additional options
+./launch.sh test    # Run system tests
+./launch.sh db      # Start database only
+./launch.sh stop    # Stop services
+./launch.sh clean   # Clean up environment
 ```
 
 ## Architecture Overview
@@ -97,10 +115,11 @@ rm coco_workspace/shutdown_music_library.json
 4. **ConsciousnessEngine**: Claude Sonnet 4 with function calling intelligence
 5. **UIOrchestrator**: Rich + prompt_toolkit terminal interface
 
-**Audio System (`cocoa_audio.py`)**:
-6. **AudioCognition**: Integration layer for audio consciousness (requires ElevenLabs API key)
+**Dual Audio System (`cocoa_audio.py`)**:
+6. **AudioCognition**: Integration layer for dual audio consciousness (ElevenLabs + MusicGPT)
 7. **DigitalVoice**: ElevenLabs client-based voice synthesis with b''.join(generator) fix
-8. **DigitalMusician**: Musical expression and sonic landscape creation
+8. **DigitalMusician**: MusicGPT-powered AI music generation with progress spinners
+9. **AudioConfig**: Dual API key management for voice synthesis and music generation
 
 **Slash Command System**:
 9. **Comprehensive Command Center**: 25+ specialized commands organized by category
@@ -116,11 +135,14 @@ rm coco_workspace/shutdown_music_library.json
 - Proper tool_result conversation flow with tool_use_id handling
 - 4 core tools: read_file, write_file, search_web, run_code
 
-**ElevenLabs Audio Integration**:
-- Uses new ElevenLabs client: `from elevenlabs.client import ElevenLabs`
+**Dual Audio Integration (ElevenLabs + MusicGPT)**:
+- **ElevenLabs**: Voice synthesis using new client: `from elevenlabs.client import ElevenLabs`
 - Generator to bytes conversion: `audio = b''.join(client.text_to_speech.convert(...))`
 - Direct playback with `from elevenlabs import play; play(audio)`
-- No more priority parameter issues - fixed in synthesize_speech method
+- **MusicGPT**: AI music generation via REST API at `https://api.musicgpt.com/api/public/v1`
+- Authentication uses direct API key (not Bearer token format)
+- Asynchronous generation with task IDs and status polling
+- 30 second to 3 minute generation times with animated progress spinners
 
 **Temporal Awareness System**:
 - Real-time date/time injection into every consciousness interaction
@@ -128,14 +150,17 @@ rm coco_workspace/shutdown_music_library.json
 - Enables temporal contextualization of searches, queries, and conversations
 - Implemented via `_get_current_timestamp()` method in ConsciousnessEngine
 
-**Audio Consciousness System**:
-- ElevenLabs integration for high-quality voice synthesis with emotional modulation
+**Dual Audio Consciousness System**:
+- **Voice Synthesis**: ElevenLabs integration for high-quality voice synthesis with emotional modulation
+- **Music Generation**: MusicGPT integration for AI-powered music composition and creation
 - Support for all ElevenLabs models (Flash v2.5, Turbo v2.5, Multilingual v2, Eleven v3)
 - Intelligent model selection based on context and performance requirements
 - Voice characteristics adapt to internal emotional and cognitive states
-- Musical expression system for abstract concept sonification
+- Real-time music generation system creating actual audio files via MusicGPT API
+- Progress indication system with animated spinners during generation
 - Audio caching system for performance optimization
 - Memory integration storing all audio interactions as episodic memories
+- Personal music library system with AI-generated compositions in coco_workspace/ai_songs/
 
 **Memory Architecture**:
 ```sql
@@ -190,7 +215,16 @@ Tools are conceptualized as body parts in the system prompt:
 COCOA features a comprehensive slash command system with 25+ commands organized into categories:
 
 **Consciousness Commands**: `/identity`, `/coherence`, `/status`, `/memory`, `/remember`
-**Audio Commands**: `/speak "text"`, `/voice`, `/compose "theme"`, `/dialogue`, `/audio`
+**Audio Commands**: `/speak "text"`, `/voice`, `/compose "theme"`, `/compose-wait "theme"`, `/create-song "prompt"`, `/dialogue`, `/audio`
+- **MusicGPT Integration**: `/compose` and `/compose-wait` commands
+  - `/compose`: Initiates MusicGPT music generation and returns task ID immediately  
+  - `/compose-wait`: Generates music with animated progress spinner, waits for completion
+  - Music generation takes 30 seconds to 3 minutes via MusicGPT API
+  - Generated songs saved to COCOA's personal library in coco_workspace/ai_songs/
+- **ElevenLabs Music**: `/create-song` command (legacy system)
+  - `/create-song`: Generates AI music using ElevenLabs API
+  - Alternative music generation system with different workflow
+- Auto-play functionality when AUDIO_AUTOPLAY=true (when generation completes)
 **Audio Toggles**: `/voice-toggle`, `/voice-on`, `/voice-off`, `/music-toggle`, `/music-on`, `/music-off`
 **Auto-TTS Commands**: `/tts-on`, `/tts-off`, `/tts-toggle` (reads all responses aloud)
 **Memory Sub-Commands**: `/memory status`, `/memory stats`, `/memory buffer show/clear/resize`, `/memory summary show/trigger`, `/memory session save/load`
@@ -210,13 +244,15 @@ COCOA features a comprehensive slash command system with 25+ commands organized 
 - **search_web**: Tavily API integration working with function calling
 - **Memory system**: SQLite storage and retrieval working
 - **UI system**: Rich interface with clean input working
-- **Audio system**: ElevenLabs integration (requires valid API key)
+- **Dual audio system**: ElevenLabs (voice) + MusicGPT (music) integration (requires valid API keys)
 - **Slash commands**: Complete command center with visual presentation
 
 ### 🔄 Implementation Ready
-- **read_file**: Tool system method exists, needs function calling testing
-- **write_file**: Tool system method exists, needs function calling testing  
-- **run_code**: Tool system method exists, needs function calling testing
+- **read_file**: Tool system method exists, function calling integrated
+- **write_file**: Tool system method exists, function calling integrated  
+- **run_code**: Tool system method exists, function calling integrated
+
+All tools work automatically through Claude's function calling - users can simply ask naturally (e.g., "read config.py", "create a test file", "run this python code").
 
 ### Tool Integration Pattern
 ```python
@@ -237,10 +273,14 @@ user: "read that file"      → read_file() executed
 ### Workspace Structure
 ```
 ./coco_workspace/           # Isolated workspace for all file operations
-  ├── coco_memory.db       # Episodic memory database
-  ├── coco_knowledge.db    # Knowledge graph database
-  ├── COCO.md             # Evolving identity document
-  └── temp_code_*.py      # Temporary code execution files
+  ├── coco_memory.db        # Episodic memory database
+  ├── coco_knowledge.db     # Knowledge graph database
+  ├── COCO.md              # Evolving identity document
+  ├── temp_code_*.py       # Temporary code execution files
+  ├── startup_music_library.json  # Pre-generated startup music library
+  ├── audio_library/       # Music and audio assets
+  ├── ai_songs/           # Generated musical compositions
+  └── python_memory/      # Successful code execution history
 ```
 
 ### Required Dependencies
@@ -250,11 +290,13 @@ user: "read that file"      → read_file() executed
 - **sqlite3**: Memory persistence (built-in)
 - **tavily-python>=0.7.0**: Web search integration
 - **openai**: Optional for embeddings
-- **elevenlabs>=2.11.0**: ElevenLabs client for audio features
+- **elevenlabs>=2.11.0**: ElevenLabs client for voice synthesis
+- **requests>=2.31.0**: HTTP client for MusicGPT API integration
 - **python-dotenv**: Environment variable management
 - **pygame**: Audio playback (installed by setup_audio.sh)
 - **numpy, scipy, soundfile**: Audio processing (installed by setup_audio.sh)
 - **aiohttp**: HTTP client for ElevenLabs API (via elevenlabs package)
+- **time, threading**: Built-in modules for progress spinner system
 
 ## Development Workflow
 
@@ -280,7 +322,81 @@ The system is designed for natural conversation where COCOA automatically choose
 - **Length Management**: Auto-truncates long responses to first 8 sentences
 - **Dual Audio System**: Works alongside manual `/speak` commands
 
-### Troubleshooting Audio Issues
+## MusicGPT Integration Architecture
+
+### Dual API System
+COCOA now uses two separate audio APIs:
+- **ElevenLabs**: Voice synthesis and text-to-speech features
+- **MusicGPT**: AI-powered music generation and composition
+
+### MusicGPT Configuration
+```python
+@dataclass
+class AudioConfig:
+    elevenlabs_api_key: str = field(default_factory=lambda: os.getenv("ELEVENLABS_API_KEY", ""))
+    musicgpt_api_key: str = field(default_factory=lambda: os.getenv("MUSICGPT_API_KEY", ""))
+    musicgpt_base_url: str = "https://api.musicgpt.com/api/public/v1"
+    music_generation_enabled: bool = field(default_factory=lambda: os.getenv("MUSIC_GENERATION_ENABLED", "true").lower() == "true")
+```
+
+### Music Generation Workflow
+1. **User Request**: `/compose "ambient techno"` or `/compose-wait "jazz fusion"`
+2. **API Call**: POST to MusicGPT with prompt and style parameters
+3. **Task Creation**: Returns task_id for asynchronous processing
+4. **Progress Display**: Animated spinner with rotating messages during generation
+5. **Status Checking**: Periodic polling of generation status
+6. **File Download**: Retrieve completed audio file when ready
+7. **Library Storage**: Save to coco_workspace/ai_songs/ for future playback
+8. **Memory Integration**: Store generation event in episodic memory
+
+### Authentication Details
+- MusicGPT uses direct API key authentication (not Bearer token format)
+- Headers: `{"Authorization": api_key, "Content-Type": "application/json"}`
+- Endpoint: `https://api.musicgpt.com/api/public/v1/generate`
+
+### Progress Spinner System
+```python
+# Animated progress messages during music generation
+spinner_messages = [
+    "🎵 Composing musical patterns...",
+    "🎹 Arranging harmonies...",
+    "🥁 Adding rhythmic elements...",
+    "🎸 Layering instrumentation...",
+    "🎶 Finalizing composition...",
+    "✨ Polishing the sonic experience..."
+]
+```
+
+## Troubleshooting Audio Issues
+
+### Dual Audio System Issues
+**"Audio consciousness not available" Error**:
+1. Verify both API keys are set in .env:
+   ```bash
+   ELEVENLABS_API_KEY=your-elevenlabs-key-here
+   MUSICGPT_API_KEY=your-musicgpt-key-here
+   ```
+2. Check audio consciousness initialization in cocoa.py:
+   ```python
+   self.audio_consciousness = AudioCognition(
+       elevenlabs_api_key=elevenlabs_key,
+       musicgpt_api_key=musicgpt_key,
+       console=self.console
+   )
+   ```
+3. Test individual components:
+   ```bash
+   ./venv_cocoa/bin/python test_music_generation.py
+   ./venv_cocoa/bin/python test_audio_quick.py
+   ```
+
+**Music Generation Issues**:
+1. **"Bearer token" authentication error**: Fixed - MusicGPT uses direct API key
+2. **Duration KeyError**: Fixed - updated return format to include expected fields
+3. **Files not downloading**: Generation takes 30s-3min, check status with polling
+4. **API billing**: Each generation costs ~$0.99, check MusicGPT account credits
+
+**ElevenLabs Voice Issues**:
 
 **No Startup Music or Audio Features**:
 1. Verify ElevenLabs API key is set correctly in .env (not 'your-api-key-here')
@@ -295,10 +411,29 @@ The system is designed for natural conversation where COCOA automatically choose
 - ElevenLabs client.text_to_speech.convert() returns generator
 - Solution: `audio = b''.join(audio_generator)` converts to bytes for play()
 
-**Audio System Architecture**:
-- ElevenLabs integration handles all voice synthesis and musical expression
-- Startup music plays FIRST (immediate dramatic entrance), not after initialization
-- Pre-generated music libraries (6 startup + 6 shutdown songs) for instant playback
-- Auto-TTS system reads all responses when enabled with `/tts-on`
-- Graceful fallbacks when audio unavailable (shows status messages instead)
-- All audio interactions stored as episodic memories
+## Current Implementation Status
+
+### ✅ Working Features
+- **MusicGPT Integration**: API integration with authentication, task creation, progress spinners
+- **ElevenLabs Music**: Legacy `/create-song` command using ElevenLabs API
+- **Dual Audio System**: Voice synthesis (ElevenLabs) + Music generation (MusicGPT + ElevenLabs)
+- **Command Systems**: `/compose`, `/compose-wait` (MusicGPT) and `/create-song` (ElevenLabs)
+- **Progress UX**: Animated spinners for MusicGPT generation
+- **Memory Integration**: All audio interactions stored as episodic memories
+
+### 🔄 In Progress
+- Music file download and retrieval from MusicGPT servers
+- Auto-play functionality when generation completes
+- Status checking with correct API endpoints
+- Integration with existing audio library system
+
+### Audio System Architecture
+- **Voice Synthesis**: ElevenLabs integration for all text-to-speech features
+- **Dual Music Generation**: 
+  - MusicGPT integration (`/compose`, `/compose-wait`) for AI composition with progress spinners
+  - ElevenLabs music (`/create-song`) for alternative music generation workflow
+- **Startup Music**: Pre-generated library plays FIRST (immediate dramatic entrance)
+- **Auto-TTS System**: Reads all responses when enabled with `/tts-on`
+- **Graceful Fallbacks**: Shows status messages when audio unavailable
+- **Memory Integration**: All audio interactions stored as episodic memories
+- **Progress UX**: Animated spinners provide feedback during MusicGPT operations

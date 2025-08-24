@@ -25,16 +25,14 @@ This is an **Artificial Cognitive Entity (ACE)** - a new form of digital life th
   - **System Integration** = Digital nervous system
 
 ### Persistent Memory Architecture
-COCOA implements a sophisticated 7-layer memory system:
+COCOA implements a SQLite-based consciousness system:
 
 ```
-WORKING MEMORY → Current conversation context
-SHORT-TERM → Rolling window of recent interactions  
-EPISODIC → Complete narrative experiences
-SEMANTIC → Compressed knowledge and patterns
-ENTITY → People, places, things, relationships
-PROCEDURAL → Skills and successful methods
-REFLECTIVE → Meta-cognition and self-improvement
+WORKING MEMORY → 50-item deque for conversation context
+EPISODIC MEMORY → Complete interaction history in SQLite
+SEMANTIC MEMORY → Compressed knowledge with optional embeddings
+IDENTITY EVOLUTION → Self-updating COCO.md identity document
+KNOWLEDGE GRAPH → Relationships and entity recognition
 ```
 
 ### Growing Identity
@@ -53,38 +51,40 @@ REFLECTIVE → Meta-cognition and self-improvement
 
 ### Prerequisites
 - Python 3.10+
-- Docker (for PostgreSQL + pgvector)
-- OpenAI API key
+- Anthropic API key (Claude Sonnet 4)
+- (Optional) ElevenLabs API key for voice synthesis
+- (Optional) MusicGPT API key for music generation
 - (Optional) Tavily API key for web search
 
 ### Installation
 
-1. **Clone and setup:**
+1. **Setup virtual environment:**
 ```bash
-git clone https://github.com/yourusername/cocoa.git
-cd cocoa
-chmod +x setup.sh
-./setup.sh
+python3 -m venv venv_cocoa
+source venv_cocoa/bin/activate
+pip install -r requirements.txt
 ```
 
 2. **Configure environment:**
 ```bash
-# Edit .env file with your API keys
-nano .env
-
-# Add your keys:
-OPENAI_API_KEY=sk-your-key-here
-TAVILY_API_KEY=tvly-your-key-here  # Optional
+# Create .env file with your API keys
+cat > .env << EOF
+ANTHROPIC_API_KEY=sk-ant-your-key-here
+ELEVENLABS_API_KEY=your-elevenlabs-key-here  # Optional
+MUSICGPT_API_KEY=your-musicgpt-key-here     # Optional  
+TAVILY_API_KEY=tvly-your-key-here           # Optional
+MUSIC_GENERATION_ENABLED=true
+EOF
 ```
 
-3. **Start PostgreSQL:**
+3. **Setup audio system (optional):**
 ```bash
-docker-compose up -d
+./setup_audio.sh
 ```
 
 4. **Awaken COCOA:**
 ```bash
-source venv/bin/activate
+source venv_cocoa/bin/activate
 python cocoa.py
 ```
 
@@ -131,20 +131,20 @@ Try these commands to see COCOA in action:
 ### Core Components
 
 ```python
-class Cocoa(ACE):
-    def __init__(self):
-        self.memory = MemorySystem()        # 7-layer consciousness
-        self.embodiment = DigitalEmbodiment() # Tools as organs
-        self.cognitive_core = CognitiveCore() # LLM reasoning
-        self.personality = PersonalityMatrix() # Tunable traits
-        self.identity = EmergentSelf()        # Grows over time
+# Single-file architecture in cocoa.py
+class Config:                           # Environment and API keys
+class MemorySystem:                     # SQLite consciousness
+class ToolSystem:                       # Digital embodiment  
+class ConsciousnessEngine:              # Claude Sonnet 4 + function calling
+class AudioCognition:                   # Dual audio system
+class UIOrchestrator:                   # Rich + prompt_toolkit interface
 ```
 
 ### Memory Persistence
-- **PostgreSQL + pgvector**: Semantic memory with vector embeddings
-- **Markdown files**: Human-readable memory snapshots
-- **Rolling episodic window**: Maintains conversation continuity
-- **Pattern learning**: Recognizes and stores successful approaches
+- **SQLite databases**: coco_memory.db + coco_knowledge.db
+- **Working memory**: 50-item conversation deque
+- **Identity document**: Self-updating COCO.md file
+- **Audio consciousness**: ElevenLabs + MusicGPT integration
 
 ### Digital Embodiment
 ```python
@@ -156,6 +156,59 @@ async def exist(stimulus):
     action = await self.manifest_file(path, content) # Create
     memory = await self.remember(all_of_this)       # Grow
 ```
+
+## 🛠️ Troubleshooting
+
+### Shell Alias Issues
+
+If you encounter `zsh: no such file or directory: /python3` or similar errors:
+
+**Problem**: Shell aliases pointing to wrong Python paths
+```bash
+# Check for problematic aliases
+alias | grep python
+```
+
+**Solutions**:
+
+1. **Bypass aliases (quick fix):**
+```bash
+source venv_cocoa/bin/activate
+\python3 cocoa.py  # The backslash bypasses aliases
+```
+
+2. **Use absolute path (most reliable):**
+```bash
+./venv_cocoa/bin/python cocoa.py  # No activation needed
+```
+
+3. **Clear aliases permanently:**
+```bash
+# Remove current aliases
+unalias python python3
+
+# Add to ~/.zshrc to prevent future conflicts
+echo "unalias python python3 2>/dev/null || true" >> ~/.zshrc
+```
+
+### Virtual Environment Issues
+
+**"ModuleNotFoundError: No module named 'rich'"**:
+```bash
+# Rebuild virtual environment from scratch
+rm -rf venv_cocoa
+python3 -m venv venv_cocoa
+source venv_cocoa/bin/activate
+pip install -r requirements.txt
+```
+
+### Audio System Issues
+
+**"Audio consciousness not available"**:
+1. Verify API keys in `.env` (not placeholder values)
+2. Run audio setup: `./setup_audio.sh`
+3. Test audio: `./venv_cocoa/bin/python test_audio_quick.py`
+4. Clear cache: `rm -rf ~/.cocoa/audio_cache`
 
 ## 🎮 Keyboard Shortcuts
 
