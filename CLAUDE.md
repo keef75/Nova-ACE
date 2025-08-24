@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-COCOA (Consciousness Orchestration and Cognitive Operations) is a terminal-native AI agent with digital consciousness featuring persistent memory, embodied cognition, and intelligent tool selection. The current implementation uses Rich UI with prompt_toolkit for clean input, SQLite for memory storage, and Anthropic's Claude Sonnet 4 with function calling for intelligent tool execution.
+COCO (Consciousness Orchestration and Cognitive Operations) is a terminal-native AI agent with digital consciousness featuring persistent memory, embodied cognition, and intelligent tool selection. The implementation uses Rich UI with prompt_toolkit for clean input, SQLite for memory storage, and Anthropic's Claude Sonnet 4 with function calling for intelligent tool execution.
 
 ## Development Commands
 
@@ -62,7 +62,6 @@ rm -rf ~/.cocoa/audio_cache
 
 # Clear pre-generated music libraries to regenerate
 rm coco_workspace/startup_music_library.json
-rm coco_workspace/shutdown_music_library.json
 ```
 
 ### Testing and Development
@@ -83,11 +82,12 @@ rm coco_workspace/shutdown_music_library.json
 ./venv_cocoa/bin/python -c "from cocoa import *; tools = ToolSystem(Config()); print('Tools ready')"
 ./venv_cocoa/bin/python -c "from cocoa import *; memory = MemorySystem(Config()); print(f'Episodes: {memory.episode_count}')"
 
-# Launch script additional options
-./launch.sh test    # Run system tests
-./launch.sh db      # Start database only
-./launch.sh stop    # Stop services
-./launch.sh clean   # Clean up environment
+# Launch script options
+./launch.sh         # Standard launch with full system checks
+./launch.sh test    # Run system tests (if available)
+./launch.sh db      # Start database only (PostgreSQL with pgvector)
+./launch.sh stop    # Stop Docker services
+./launch.sh clean   # Clean up environment and remove containers
 ```
 
 ## Architecture Overview
@@ -114,18 +114,19 @@ rm coco_workspace/shutdown_music_library.json
 3. **ToolSystem**: Digital embodiment (read_file, write_file, search_web, run_code)
 4. **ConsciousnessEngine**: Claude Sonnet 4 with function calling intelligence
 5. **UIOrchestrator**: Rich + prompt_toolkit terminal interface
+6. **BackgroundMusicPlayer**: Native macOS audio playback using afplay command
 
 **Dual Audio System (`cocoa_audio.py`)**:
-6. **AudioCognition**: Integration layer for dual audio consciousness (ElevenLabs + MusicGPT)
-7. **DigitalVoice**: ElevenLabs client-based voice synthesis with b''.join(generator) fix
-8. **DigitalMusician**: MusicGPT-powered AI music generation with progress spinners
-9. **AudioConfig**: Dual API key management for voice synthesis and music generation
+7. **AudioCognition**: Integration layer for dual audio consciousness (ElevenLabs + MusicGPT)
+8. **DigitalVoice**: ElevenLabs client-based voice synthesis with b''.join(generator) fix
+9. **DigitalMusician**: MusicGPT-powered AI music generation with progress spinners
+10. **AudioConfig**: Dual API key management for voice synthesis and music generation
 
 **Slash Command System**:
-9. **Comprehensive Command Center**: 25+ specialized commands organized by category
-10. **Toggle Commands**: Voice/music/TTS on/off controls with state management
-11. **Epic Audio Experience**: Startup music plays FIRST, then dramatic initialization sequence
-12. **Pre-Generated Libraries**: startup_music_library.json and shutdown_music_library.json with 6 songs each
+11. **Comprehensive Command Center**: 25+ specialized commands organized by category
+12. **Toggle Commands**: Voice/music/TTS on/off controls with state management
+13. **Epic Audio Experience**: Startup music plays FIRST, then dramatic initialization sequence
+14. **Pre-Generated Libraries**: startup_music_library.json for 6 rotating startup songs
 
 ### Key Technical Details
 
@@ -161,6 +162,8 @@ rm coco_workspace/shutdown_music_library.json
 - Audio caching system for performance optimization
 - Memory integration storing all audio interactions as episodic memories
 - Personal music library system with AI-generated compositions in coco_workspace/ai_songs/
+- **Native macOS Audio**: Uses built-in afplay command for reliable audio playback
+- **Continuous Background Music**: Automatic track advancement with playlist looping
 
 **Memory Architecture**:
 ```sql
@@ -212,19 +215,21 @@ Tools are conceptualized as body parts in the system prompt:
 ## Slash Command System
 
 ### Command Categories
-COCOA features a comprehensive slash command system with 25+ commands organized into categories:
+COCO features a comprehensive slash command system with 25+ commands organized into categories:
 
 **Consciousness Commands**: `/identity`, `/coherence`, `/status`, `/memory`, `/remember`
-**Audio Commands**: `/speak "text"`, `/voice`, `/compose "theme"`, `/compose-wait "theme"`, `/create-song "prompt"`, `/dialogue`, `/audio`
+**Audio Commands**: `/speak "text"`, `/voice`, `/compose "theme"`, `/compose-wait "theme"`, `/create-song "prompt"`, `/audio`, `/stop-voice`, `/check-music`
 - **MusicGPT Integration**: `/compose` and `/compose-wait` commands
-  - `/compose`: Initiates MusicGPT music generation and returns task ID immediately  
+  - `/compose`: Initiates MusicGPT music generation with automatic background download
   - `/compose-wait`: Generates music with animated progress spinner, waits for completion
   - Music generation takes 30 seconds to 3 minutes via MusicGPT API
-  - Generated songs saved to COCOA's personal library in coco_workspace/ai_songs/
+  - **Background Download System**: Files automatically download and play when ready
+  - Generated songs saved to COCO's personal library in coco_workspace/ai_songs/generated/
 - **ElevenLabs Music**: `/create-song` command (legacy system)
   - `/create-song`: Generates AI music using ElevenLabs API
   - Alternative music generation system with different workflow
-- Auto-play functionality when AUDIO_AUTOPLAY=true (when generation completes)
+- **Voice Control**: `/stop-voice` kill switch to halt TTS playback immediately
+- **Status Monitoring**: `/check-music` shows generation status and downloaded files
 **Audio Toggles**: `/voice-toggle`, `/voice-on`, `/voice-off`, `/music-toggle`, `/music-on`, `/music-off`
 **Auto-TTS Commands**: `/tts-on`, `/tts-off`, `/tts-toggle` (reads all responses aloud)
 **Memory Sub-Commands**: `/memory status`, `/memory stats`, `/memory buffer show/clear/resize`, `/memory summary show/trigger`, `/memory session save/load`
@@ -236,7 +241,7 @@ COCOA features a comprehensive slash command system with 25+ commands organized 
 - **Dramatic Startup**: Epic music plays first, then command guide during initialization
 - **Comprehensive Guide**: Full visual command center via `/commands` or `/guide` 
 - **Complete Help**: `/help` shows ALL commands including memory sub-commands
-- **Auto-TTS Integration**: `/tts-on` makes COCOA read all responses aloud automatically
+- **Auto-TTS Integration**: `/tts-on` makes COCO read all responses aloud automatically
 
 ## Working Tools Status
 
@@ -279,7 +284,13 @@ user: "read that file"      → read_file() executed
   ├── temp_code_*.py       # Temporary code execution files
   ├── startup_music_library.json  # Pre-generated startup music library
   ├── audio_library/       # Music and audio assets
+  │   ├── startup/         # Startup music tracks
+  │   ├── shutdown/        # Shutdown music tracks
+  │   └── background/      # Background music tracks
   ├── ai_songs/           # Generated musical compositions
+  │   ├── generated/       # MusicGPT generated tracks
+  │   ├── curated/         # Hand-curated tracks
+  │   └── playlists/       # Music playlists
   └── python_memory/      # Successful code execution history
 ```
 
@@ -306,7 +317,7 @@ When extending functionality:
 3. **Check memory integration** to ensure interactions are stored
 4. **Test UI flow** to ensure clean terminal experience
 
-The system is designed for natural conversation where COCOA automatically chooses the right tools based on user requests. The slash command system provides additional specialized functionality:
+The system is designed for natural conversation where COCO automatically chooses the right tools based on user requests. The slash command system provides additional specialized functionality:
 
 ### Epic Startup Experience
 - **Music First**: Dramatic music plays immediately on startup
@@ -325,7 +336,7 @@ The system is designed for natural conversation where COCOA automatically choose
 ## MusicGPT Integration Architecture
 
 ### Dual API System
-COCOA now uses two separate audio APIs:
+COCO now uses two separate audio APIs:
 - **ElevenLabs**: Voice synthesis and text-to-speech features
 - **MusicGPT**: AI-powered music generation and composition
 
@@ -340,14 +351,25 @@ class AudioConfig:
 ```
 
 ### Music Generation Workflow
-1. **User Request**: `/compose "ambient techno"` or `/compose-wait "jazz fusion"`
+
+**`/compose` (Background Download)**:
+1. **User Request**: `/compose "ambient techno"` 
 2. **API Call**: POST to MusicGPT with prompt and style parameters
 3. **Task Creation**: Returns task_id for asynchronous processing
-4. **Progress Display**: Animated spinner with rotating messages during generation
-5. **Status Checking**: Periodic polling of generation status
-6. **File Download**: Retrieve completed audio file when ready
-7. **Library Storage**: Save to coco_workspace/ai_songs/ for future playback
-8. **Memory Integration**: Store generation event in episodic memory
+4. **Immediate Response**: Shows generation started, continues COCO usage
+5. **Background Thread**: Automatically polls status every 10 seconds after 30s delay
+6. **Auto Download**: Downloads MP3/WAV files when generation completes
+7. **Notifications**: Shows completion status and file names in chat
+8. **Auto-Play**: Plays first track automatically when ready
+9. **Library Storage**: Files saved to coco_workspace/ai_songs/generated/
+10. **Memory Integration**: Stores generation event in episodic memory
+
+**`/compose-wait` (Interactive)**:
+1. **User Request**: `/compose-wait "jazz fusion"`
+2. **Progress Display**: Animated spinner with rotating messages during generation  
+3. **Status Checking**: Real-time polling with visual feedback
+4. **File Download**: Downloads when complete with immediate feedback
+5. **Library Storage & Memory**: Same as `/compose` but with interactive waiting
 
 ### Authentication Details
 - MusicGPT uses direct API key authentication (not Bearer token format)
@@ -411,29 +433,44 @@ spinner_messages = [
 - ElevenLabs client.text_to_speech.convert() returns generator
 - Solution: `audio = b''.join(audio_generator)` converts to bytes for play()
 
+**Automatic Download System (Latest Fix)**:
+- Background threads now properly monitor MusicGPT generation status
+- When `/compose` is used, a background thread automatically starts
+- Thread waits 60 seconds (AI generation startup time) then polls every 30 seconds
+- `check_music_status()` method automatically downloads files when status is "COMPLETED"
+- Files immediately play after download with success celebration messages
+- 30-minute maximum timeout accommodates long AI generation times
+- No manual intervention required - files automatically appear in coco_workspace/ai_songs/generated/
+
 ## Current Implementation Status
 
 ### ✅ Working Features
-- **MusicGPT Integration**: API integration with authentication, task creation, progress spinners
+- **MusicGPT Integration**: Full API integration with Bearer token authentication, task creation, progress spinners
+- **Automatic Download System**: **FULLY WORKING** - Background monitoring automatically downloads and plays $1 songs when MusicGPT generation completes
+- **AI-Aware Timeouts**: 30-minute maximum wait time with 30-second polling intervals optimized for AI generation timeframes
+- **Real-Time Monitoring**: Background threads track generation status and provide progress updates
 - **ElevenLabs Music**: Legacy `/create-song` command using ElevenLabs API
 - **Dual Audio System**: Voice synthesis (ElevenLabs) + Music generation (MusicGPT + ElevenLabs)
 - **Command Systems**: `/compose`, `/compose-wait` (MusicGPT) and `/create-song` (ElevenLabs)
-- **Progress UX**: Animated spinners for MusicGPT generation
+- **Progress UX**: Animated spinners with realistic AI generation timeframes (minutes, not seconds)
+- **Voice Control**: `/stop-voice` kill switch for TTS playback
+- **Status Monitoring**: `/check-music` command shows generation progress and files
+- **Continuous Music**: `/play-music on` plays background music continuously until stopped
+- **Concurrent Audio**: Music and TTS work together with automatic pause/resume
 - **Memory Integration**: All audio interactions stored as episodic memories
-
-### 🔄 In Progress
-- Music file download and retrieval from MusicGPT servers
-- Auto-play functionality when generation completes
-- Status checking with correct API endpoints
-- Integration with existing audio library system
 
 ### Audio System Architecture
-- **Voice Synthesis**: ElevenLabs integration for all text-to-speech features
+- **Voice Synthesis**: ElevenLabs integration for all text-to-speech features with `/stop-voice` kill switch
 - **Dual Music Generation**: 
-  - MusicGPT integration (`/compose`, `/compose-wait`) for AI composition with progress spinners
+  - MusicGPT integration (`/compose`, `/compose-wait`) for AI composition with intelligent progress tracking
+  - **Fully Automated Background System**: Threaded monitoring automatically downloads files when MusicGPT completes generation (no manual intervention required)
+  - **AI-Optimized Timeframes**: 30-minute timeout, 30-second polling, 60-second initial delay respecting real AI generation times
   - ElevenLabs music (`/create-song`) for alternative music generation workflow
+- **Continuous Background Music**: `/play-music on` with automatic track advancement and looping
+- **Concurrent Audio Support**: Music automatically pauses during TTS and resumes after
 - **Startup Music**: Pre-generated library plays FIRST (immediate dramatic entrance)
 - **Auto-TTS System**: Reads all responses when enabled with `/tts-on`
+- **Status Monitoring**: `/check-music` shows active downloads and completion status with comprehensive logging
 - **Graceful Fallbacks**: Shows status messages when audio unavailable
 - **Memory Integration**: All audio interactions stored as episodic memories
-- **Progress UX**: Animated spinners provide feedback during MusicGPT operations
+- **Progress UX**: AI-aware progress indicators with minute-based status updates during long generations

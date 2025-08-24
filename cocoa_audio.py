@@ -607,10 +607,174 @@ class AudioCognition:
         self.audio_memories = []
         self.current_voice_state = VoiceState()
         
+        # Voice playback control
+        self.current_voice_process = None
+        
         # Audio consciousness state
         self.is_speaking = False
         self.is_composing = False
-        self.last_expression_time = None
+        
+        # Background music generation tracking
+        self.active_downloads = set()  # Track active download threads
+        
+    def stop_voice(self) -> bool:
+        """Stop any current voice synthesis playback (kill switch)"""
+        try:
+            # Kill any audio processes on macOS 
+            import subprocess
+            import platform
+            
+            if platform.system() == "Darwin":  # macOS
+                # Kill any afplay processes (this will stop ElevenLabs audio)
+                try:
+                    subprocess.run(['pkill', '-f', 'afplay'], 
+                                 stdout=subprocess.DEVNULL, 
+                                 stderr=subprocess.DEVNULL,
+                                 timeout=2)
+                except:
+                    pass
+                
+                # Also try killing any Python audio processes
+                try:
+                    subprocess.run(['pkill', '-f', 'python.*audio'], 
+                                 stdout=subprocess.DEVNULL, 
+                                 stderr=subprocess.DEVNULL,
+                                 timeout=2)
+                except:
+                    pass
+            
+            # Reset speaking state
+            self.is_speaking = False
+            return True
+            
+        except Exception as e:
+            self.console.print(f"[red]Voice stop error: {e}[/red]")
+            return False
+    
+    def start_background_music_download(self, task_id: str, concept: str, auto_play: bool = True):
+        """Start background thread to download music when generation completes"""
+        import threading
+        import time
+        
+        # Prevent duplicate downloads for same task
+        if task_id in self.active_downloads:
+            self.console.print(f"[yellow]⚠️ Download already in progress for task {task_id[:8]}...[/yellow]")
+            return False
+            
+        self.active_downloads.add(task_id)
+        self.console.print(f"[bright_green]🚀 Starting background download thread for '{concept}' (Task: {task_id[:8]}...)[/bright_green]")
+        
+        def background_download():
+            import asyncio
+            
+            thread_id = threading.current_thread().name
+            self.console.print(f"[dim]🧵 Download thread {thread_id} started for '{concept}'[/dim]")
+            
+            async def download_when_ready():
+                max_wait_time = 1800  # 30 minutes max wait for AI generation
+                wait_interval = 30   # Check every 30 seconds (not 10s)
+                elapsed_time = 0
+                
+                self.console.print(f"[bright_cyan]🎵 Background: Monitoring '{concept}' generation (Task: {task_id[:8]}...)[/bright_cyan]")
+                
+                # Initial delay - AI music generation takes time
+                self.console.print(f"[dim]⏳ Initial 60s delay before first status check (AI generation takes time)...[/dim]")
+                await asyncio.sleep(60)
+                elapsed_time = 60
+                
+                while elapsed_time < max_wait_time:
+                    try:
+                        self.console.print(f"[dim]🔍 Checking status for task {task_id[:8]}... (attempt at {elapsed_time}s)[/dim]")
+                        
+                        # check_music_status automatically downloads files when ready!
+                        status_result = await self.musician.check_music_status(task_id)
+                        
+                        if status_result.get("status") == "completed":
+                            # Files were already downloaded by check_music_status!
+                            files = status_result.get("files", [])
+                            if files:
+                                self.console.print(f"[bright_green]🎉 SUCCESS! '{concept}' files automatically downloaded![/bright_green]")
+                                
+                                # Show what was downloaded
+                                for file_path in files:
+                                    filename = Path(file_path).name
+                                    self.console.print(f"[bright_cyan]   ✅ {filename}[/bright_cyan]")
+                                
+                                # Manual auto-play if needed (check_music_status might have already played it)
+                                if auto_play and files and not self.config.autoplay:
+                                    self.console.print(f"[bright_magenta]🔊 Now playing: {Path(files[0]).name}[/bright_magenta]")
+                                    await self.play_music_file(files[0])
+                                
+                                self.console.print(f"[bright_green]🎵 Your ${1} song is ready! Files saved to coco_workspace/ai_songs/generated/[/bright_green]")
+                                break
+                            else:
+                                self.console.print(f"[yellow]⚠️ Generation completed but no files were downloaded for '{concept}'[/yellow]")
+                                break
+                                
+                        elif status_result.get("status") == "failed":
+                            self.console.print(f"[red]❌ Music generation failed for '{concept}': {status_result.get('error', 'Unknown error')}[/red]")
+                            break
+                        else:
+                            # Still generating - show status 
+                            current_status = status_result.get("status", "unknown")
+                            if elapsed_time % 120 == 0:  # Only show every 2 minutes to reduce spam
+                                minutes = elapsed_time // 60
+                                self.console.print(f"[dim yellow]🎵 Status: {current_status.upper()} - '{concept}' still generating ({minutes} min elapsed)...[/dim yellow]")
+                            elif elapsed_time <= 120:  # Show more frequent updates in first 2 minutes
+                                self.console.print(f"[dim yellow]🎵 Status: {current_status.upper()} - '{concept}' in progress ({elapsed_time}s elapsed)...[/dim yellow]")
+                            
+                        # Wait before next check
+                        await asyncio.sleep(wait_interval)
+                        elapsed_time += wait_interval
+                            
+                    except Exception as e:
+                        self.console.print(f"[red]❌ Background monitoring error for '{concept}': {e}[/red]")
+                        import traceback
+                        self.console.print(f"[red]Traceback: {traceback.format_exc()}[/red]")
+                        break
+                
+                # Cleanup
+                self.active_downloads.discard(task_id)
+                
+                if elapsed_time >= max_wait_time:
+                    minutes = max_wait_time // 60
+                    self.console.print(f"[red]⏰ Timeout waiting for '{concept}' generation after {minutes} minutes[/red]")
+                    self.console.print(f"[yellow]💡 AI generation may still be in progress. Try checking later with:[/yellow]")
+                    self.console.print(f"[yellow]   ./venv_cocoa/bin/python check_music_status.py[/yellow]")
+                    
+                self.console.print(f"[dim]🧵 Download monitor finished for '{concept}'[/dim]")
+            
+            # Run the async download
+            try:
+                self.console.print(f"[dim]🔄 Running asyncio.run() in thread for '{concept}'...[/dim]")
+                asyncio.run(download_when_ready())
+                self.console.print(f"[dim]✅ asyncio.run() completed successfully for '{concept}'[/dim]")
+            except Exception as e:
+                self.console.print(f"[red]❌ Background download thread error for '{concept}': {e}[/red]")
+                import traceback
+                self.console.print(f"[red]Thread traceback: {traceback.format_exc()}[/red]")
+                self.active_downloads.discard(task_id)
+        
+        # Start the background thread
+        try:
+            download_thread = threading.Thread(target=background_download, daemon=True, name=f"MusicDownload-{task_id[:8]}")
+            download_thread.start()
+            self.console.print(f"[bright_green]✅ Background thread started successfully for '{concept}'[/bright_green]")
+            
+            # Verify thread is alive
+            time.sleep(0.1)  # Brief pause
+            if download_thread.is_alive():
+                self.console.print(f"[bright_green]🔄 Thread confirmed alive: {download_thread.name}[/bright_green]")
+            else:
+                self.console.print(f"[red]❌ Thread died immediately: {download_thread.name}[/red]")
+                return False
+            
+        except Exception as e:
+            self.console.print(f"[red]❌ Failed to start background thread for '{concept}': {e}[/red]")
+            self.active_downloads.discard(task_id)
+            return False
+        
+        return True
     
     def update_internal_state(self, internal_state: Dict[str, Any]):
         """Update voice state based on COCOA's internal consciousness state"""

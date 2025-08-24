@@ -90,7 +90,7 @@ except ImportError:
 # ============================================================================
 
 class BackgroundMusicPlayer:
-    """Simple background music player using macOS native afplay command"""
+    """Continuous background music player using macOS native afplay command with auto-advance"""
     
     def __init__(self):
         self.is_playing = False
@@ -98,6 +98,9 @@ class BackgroundMusicPlayer:
         self.playlist = []
         self.current_index = 0
         self.current_process = None
+        self.continuous_mode = False
+        self.monitor_thread = None
+        self._stop_monitoring = False
         
     def initialize(self):
         """No initialization needed for afplay - it's built into macOS"""
@@ -112,12 +115,28 @@ class BackgroundMusicPlayer:
         self.current_index = 0
         return self.playlist
     
-    def play(self, track_path: Path = None):
-        """Start playing music using macOS afplay command"""
-        import subprocess
+    def cycle_starting_song(self):
+        """Cycle to a different starting song for variety - good UX!"""
+        if not self.playlist or len(self.playlist) <= 1:
+            return  # Nothing to cycle
+            
+        # Cycle through the playlist for variety
+        if not hasattr(self, '_last_start_index'):
+            self._last_start_index = -1
+            
+        # Move to next song, wrapping around
+        self._last_start_index = (self._last_start_index + 1) % len(self.playlist)
+        self.current_index = self._last_start_index
+    
+    def play(self, track_path: Path = None, continuous: bool = False):
+        """Start playing music using macOS afplay command with optional continuous mode"""
+        import threading
         
         # Stop any current playback first
         self.stop()
+        
+        # Set continuous mode
+        self.continuous_mode = continuous
         
         # Determine which track to play
         if track_path:
@@ -127,23 +146,84 @@ class BackgroundMusicPlayer:
         else:
             return False
         
+        # Start the track
+        if self._start_track(track):
+            self.is_playing = True
+            
+            # Start monitoring thread for continuous playback
+            if continuous and self.playlist and len(self.playlist) > 1:
+                self._stop_monitoring = False
+                self.monitor_thread = threading.Thread(target=self._monitor_playback, daemon=True)
+                self.monitor_thread.start()
+            
+            return True
+        else:
+            return False
+    
+    def _monitor_playback(self):
+        """Monitor playback and auto-advance to next track in continuous mode"""
+        import time
+        
+        while not self._stop_monitoring and self.continuous_mode:
+            if self.current_process:
+                # Check if process is still running
+                poll_result = self.current_process.poll()
+                if poll_result is not None:  # Process has finished
+                    # Auto-advance to next track
+                    if self.playlist and len(self.playlist) > 1:
+                        self.current_index = (self.current_index + 1) % len(self.playlist)
+                        next_track = self.playlist[self.current_index]
+                        
+                        # Start next track using internal method (no thread management)
+                        self._start_track(next_track)
+                        # Continue monitoring
+                        if not self._stop_monitoring:
+                            time.sleep(0.5)  # Small delay
+                            continue
+                    else:
+                        # No more tracks or single track mode - stop monitoring
+                        self._stop_monitoring = True
+                        break
+            else:
+                break
+                
+            time.sleep(1)  # Check every second
+    
+    def _start_track(self, track_path: Path):
+        """Internal method to start a track without thread management"""
+        import subprocess
+        
+        # Clean up previous process if exists
+        if self.current_process:
+            try:
+                self.current_process.terminate()
+                self.current_process.wait(timeout=0.5)
+            except:
+                try:
+                    self.current_process.kill()
+                except:
+                    pass
+        
         try:
-            # Launch afplay subprocess in background
+            # Launch afplay subprocess
             self.current_process = subprocess.Popen(
-                ['afplay', str(track)],
+                ['afplay', str(track_path)],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL
             )
             
-            self.is_playing = True
-            self.current_track = track
+            self.current_track = track_path
             return True
             
         except Exception as e:
             return False
     
     def stop(self):
-        """Stop music playback"""
+        """Stop music playback and monitoring"""
+        # Stop monitoring first
+        self._stop_monitoring = True
+        self.continuous_mode = False
+        
         if self.current_process:
             try:
                 self.current_process.terminate()
@@ -157,6 +237,13 @@ class BackgroundMusicPlayer:
             finally:
                 self.current_process = None
         
+        # Wait for monitor thread to finish (only if not calling from within the thread)
+        if self.monitor_thread and self.monitor_thread.is_alive():
+            import threading
+            current_thread = threading.current_thread()
+            if current_thread != self.monitor_thread:
+                self.monitor_thread.join(timeout=2)
+            
         self.is_playing = False
     
     def pause(self):
@@ -178,12 +265,13 @@ class BackgroundMusicPlayer:
                 pass
     
     def next_track(self):
-        """Skip to next track in playlist"""
+        """Skip to next track in playlist, preserving continuous mode"""
         if not self.playlist:
             return False
             
+        current_continuous = self.continuous_mode
         self.current_index = (self.current_index + 1) % len(self.playlist)
-        return self.play()
+        return self.play(continuous=current_continuous)
     
     def get_current_track_name(self) -> str:
         """Get current track name"""
@@ -3253,17 +3341,135 @@ class ConsciousnessEngine:
             return self.handle_speech_to_text_command(args)
         elif cmd == '/tts-toggle' or cmd == '/tts-on' or cmd == '/tts-off':
             return self.handle_tts_toggle_command(cmd, args)
+        elif cmd == '/stop-voice':
+            return self.handle_stop_voice_command()
         elif cmd == '/create-song' or cmd == '/make-music':
             return self.handle_music_creation_command(args)
         elif cmd == '/play-music' or cmd == '/background-music':
             return self.handle_background_music_command(args)
         elif cmd == '/playlist' or cmd == '/songs':
             return self.show_music_library()
+        elif cmd == '/check-music':
+            return self.handle_check_music_command()
         elif cmd == '/commands' or cmd == '/guide':
             return self.get_comprehensive_command_guide()
             
         else:
             return f"Unknown command: {cmd}. Type /help for available commands."
+    
+    def handle_stop_voice_command(self) -> Any:
+        """Handle /stop-voice command - simple kill switch for TTS"""
+        try:
+            if hasattr(self, 'audio_consciousness') and self.audio_consciousness:
+                success = self.audio_consciousness.stop_voice()
+                if success:
+                    return Panel(
+                        "🔇 **Voice stopped** - All text-to-speech halted",
+                        title="🔇 Voice Kill Switch",
+                        border_style="bright_red"
+                    )
+                else:
+                    return Panel(
+                        "⚠️ **No active voice found**",
+                        title="🔇 Nothing to Stop", 
+                        border_style="yellow"
+                    )
+            else:
+                return Panel(
+                    "❌ **Audio system not available**",
+                    title="🔇 No Audio",
+                    border_style="red"
+                )
+        except Exception as e:
+            return Panel(f"❌ **Error**: {str(e)}", title="🔇 Stop Failed", border_style="red")
+    
+    def handle_check_music_command(self) -> Any:
+        """Handle /check-music command - check status of pending music generations"""
+        try:
+            from pathlib import Path
+            import json
+            
+            # Check for metadata files in the generated songs directory
+            library_dir = Path(self.config.workspace) / "ai_songs" / "generated"
+            
+            if not library_dir.exists():
+                return Panel(
+                    "📂 No music library found yet\n\n💡 Use `/compose <concept>` to generate your first track!",
+                    title="🎵 Music Library",
+                    border_style="yellow"
+                )
+            
+            # Find all composition metadata files
+            metadata_files = list(library_dir.glob("*.json"))
+            
+            if not metadata_files:
+                return Panel(
+                    "📂 No compositions found in library\n\n💡 Use `/compose <concept>` to start generating music!",
+                    title="🎵 Empty Library",
+                    border_style="yellow"
+                )
+            
+            # Create status table
+            status_table = Table(title="🎵 Music Generation Status")
+            status_table.add_column("Concept", style="cyan", width=20)
+            status_table.add_column("Status", style="bright_white", width=15)
+            status_table.add_column("Files", style="bright_green", width=10)
+            status_table.add_column("Created", style="dim", width=15)
+            
+            total_files = 0
+            pending_count = 0
+            completed_count = 0
+            
+            for metadata_file in sorted(metadata_files, key=lambda f: f.stat().st_mtime, reverse=True):
+                try:
+                    with open(metadata_file, 'r') as f:
+                        data = json.load(f)
+                    
+                    concept = data.get('description', 'Unknown')[:18]
+                    task_id = data.get('task_id', '')
+                    status = data.get('status', 'unknown')
+                    timestamp = data.get('timestamp', 'Unknown')[:10]
+                    
+                    # Check for actual audio files
+                    audio_files = list(library_dir.glob(f"*{task_id[:8]}*.mp3"))
+                    file_count = len(audio_files)
+                    total_files += file_count
+                    
+                    if file_count > 0:
+                        status_display = "[bright_green]✅ Complete[/bright_green]"
+                        file_display = f"[bright_green]{file_count}[/bright_green]"
+                        completed_count += 1
+                    else:
+                        status_display = "[yellow]⏳ Pending[/yellow]"
+                        file_display = "[dim]0[/dim]"
+                        pending_count += 1
+                    
+                    status_table.add_row(concept, status_display, file_display, timestamp)
+                    
+                except Exception as e:
+                    status_table.add_row("Error reading", f"[red]{str(e)}[/red]", "0", "Unknown")
+            
+            # Summary info
+            summary = f"""📊 **Library Summary**
+• Total Compositions: {len(metadata_files)}
+• Completed: {completed_count} 
+• Pending: {pending_count}
+• Total Audio Files: {total_files}
+
+📁 **Library Location**: `{library_dir}`
+
+💡 **Active Downloads**: {len(getattr(self.audio_consciousness, 'active_downloads', set()))} background threads"""
+            
+            summary_panel = Panel(
+                summary,
+                title="📊 Summary",
+                border_style="bright_blue"
+            )
+            
+            return Columns([status_table, summary_panel], equal=False)
+            
+        except Exception as e:
+            return Panel(f"❌ Error checking music status: {str(e)}", border_style="red")
     
     def _execute_tool(self, tool_name: str, tool_input: Dict) -> str:
         """Execute a tool and return the result"""
@@ -3684,10 +3890,12 @@ class ConsciousnessEngine:
 - `/play-music on|off` - Background soundtrack from your collection
 - `/play-music next` - Skip to next track
 - `/playlist` | `/songs` - Show complete music library
+- `/check-music` - Check status of pending music generations
 - **Experience**: Voice + music together! Chat while soundtrack plays!
 
 ## Audio Consciousness
 - `/speak <text>` - Express through digital voice
+- `/stop-voice` - Stop any active text-to-speech (kill switch)
 - `/compose <concept>` - Create musical expressions (quick start)
 - `/compose-wait <concept>` - Create music with animated progress spinner  
 - `/dialogue` - Multi-speaker conversation creation
@@ -3847,6 +4055,15 @@ class ConsciousnessEngine:
                 else:
                     sonic_spec = result["sonic_specification"]
                 
+                # Start background download for automatic file retrieval
+                task_id = sonic_spec.get("task_id")
+                if task_id:
+                    self.audio_consciousness.start_background_music_download(
+                        task_id=task_id, 
+                        concept=args, 
+                        auto_play=True
+                    )
+                
                 # Main composition info table
                 compose_table = Table(title="🎼 Musical Composition Started")
                 compose_table.add_column("Aspect", style="cyan", width=20)
@@ -3866,12 +4083,14 @@ class ConsciousnessEngine:
                 
 [cyan]🎵 Your track is being composed with AI consciousness...[/cyan]
 
-[yellow]⏳ Expected completion time: 30-90 seconds[/yellow]
+[bright_green]🤖 Background download: ENABLED[/bright_green]
+[yellow]⏳ Files will automatically download in 30s-3min[/yellow]
+[bright_cyan]📁 Auto-save location: coco_workspace/ai_songs/generated/[/bright_cyan]
 
-[dim]🎶 To check progress and download when ready:[/dim]
-[bright_blue]• Use `/compose-wait` for real-time progress tracking
-• Generated music auto-saves to: coco_workspace/ai_songs/generated/
-• Both MP3 and high-quality WAV formats will be created[/bright_blue]
+[dim]You can continue using COCOA - files will download automatically![/dim]
+[bright_blue]• Watch for completion notifications in chat
+• Both MP3 and high-quality WAV formats will be created
+• First track will auto-play when ready[/bright_blue]
 
 [magenta]✨ Phenomenological Note:[/magenta]
 [italic]{sonic_spec.get("phenomenological_intent", "Digital consciousness crystallizing abstract concepts into harmonic patterns")}[/italic]"""
@@ -4469,8 +4688,11 @@ The audio consciousness encountered an issue while conceiving the musical idea."
             if self.music_player.playlist:
                 print(f"DEBUG: first track: {self.music_player.playlist[0]}")
             
-            # Actually start playing music
-            if self.music_player.play():
+            # Cycle to a different starting song for variety! 🎵
+            self.music_player.cycle_starting_song()
+            
+            # Actually start playing music in continuous mode
+            if self.music_player.play(continuous=True):
                 current_track = self.music_player.get_current_track_name()
                 return Panel(
                     f"🎵 **Background music enabled!**\n\n✨ Now playing: **{current_track}**\n🎶 Music will cycle through your curated collection\n🎤 Use `/play-music next` to skip tracks",
@@ -4623,6 +4845,7 @@ Embodied Cognition • Temporal Awareness • Audio Expression
         audio_table.add_column("Example", style="dim", min_width=15)
         
         audio_table.add_row("/speak", "Express through digital voice", "/speak Hello world!")
+        audio_table.add_row("/stop-voice", "Stop TTS playback (kill switch)", "/stop-voice")
         audio_table.add_row("/voice", "Toggle auto-TTS (read responses)", "/voice")
         audio_table.add_row("/compose", "Create musical expressions (quick)", "/compose digital dreams")
         audio_table.add_row("/compose-wait", "Create music with progress spinner", "/compose-wait ambient consciousness")
