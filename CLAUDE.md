@@ -30,10 +30,12 @@ ANTHROPIC_API_KEY=sk-ant-...     # Primary reasoning (required)
 OPENAI_API_KEY=sk-proj-...       # Embeddings (optional) 
 TAVILY_API_KEY=tvly-...          # Web search (required for search tool)
 ELEVENLABS_API_KEY=your-api-key-here   # Voice synthesis (get from https://elevenlabs.io)
-MUSICGPT_API_KEY=your-api-key-here     # AI music generation (get from https://musicgpt.com)
+GOAPI_API_KEY=your-goapi-api-key-here  # AI music generation via GoAPI.ai Music-U (get from https://goapi.ai)
 MUSIC_GENERATION_ENABLED=true         # Enable/disable music generation features
 FREEPIK_API_KEY=your-freepik-api-key   # Visual generation (get from https://freepik.com/mystic)
 VISUAL_CONSCIOUSNESS_ENABLED=true     # Enable/disable visual consciousness features
+FAL_API_KEY=your-fal-api-key-here     # Video generation (get from https://fal.ai)
+VIDEO_CONSCIOUSNESS_ENABLED=true     # Enable/disable video consciousness features
 ```
 
 ### Audio System Setup
@@ -43,15 +45,16 @@ VISUAL_CONSCIOUSNESS_ENABLED=true     # Enable/disable visual consciousness feat
 
 # IMPORTANT: Add your real API keys to .env file
 # 1. Get ElevenLabs API key from: https://elevenlabs.io (for voice synthesis)
-# 2. Get MusicGPT API key from: https://musicgpt.com (for music generation)
+# 2. Get GoAPI.ai API key from: https://goapi.ai (for music generation via Music-U)
 # 3. Replace placeholder keys in .env with actual keys
 # 4. Audio features (startup music, /speak, /compose) require valid keys
 
 # Test audio system (requires valid API keys)
 ./venv_cocoa/bin/python test_audio_quick.py
 
-# Test music generation specifically (requires MusicGPT API key)
-./venv_cocoa/bin/python test_music_generation.py
+# Test music generation specifically (requires GoAPI.ai API key)
+./venv_cocoa/bin/python test_goapi_quick.py
+./venv_cocoa/bin/python test_task_id_fix.py
 
 # Test spinner system for music generation UX
 ./venv_cocoa/bin/python test_spinner.py
@@ -64,6 +67,9 @@ rm -rf ~/.cocoa/audio_cache
 
 # Clear pre-generated music libraries to regenerate
 rm coco_workspace/startup_music_library.json
+
+# Test clean GoAPI.ai system (no legacy interference)
+./venv_cocoa/bin/python test_clean_system.py
 ```
 
 ### Visual Consciousness Setup
@@ -95,6 +101,35 @@ rm -rf coco_workspace/visuals/
 rm coco_workspace/visual_memory.json
 ```
 
+### Video Consciousness Setup
+```bash
+# Install video dependencies (Fal AI client)
+./venv_cocoa/bin/pip install fal-client
+
+# IMPORTANT: Add your Fal AI API key to .env file
+# 1. Get Fal AI API key from: https://fal.ai (sign up and get API key)
+# 2. Replace placeholder key in .env with actual key
+# 3. Video features (/video, /animate, /create-video) require valid key
+
+# Test corrected Fal AI implementation (FIXED)
+./venv_cocoa/bin/python test_fal_api_fix.py
+
+# Test video consciousness system (requires Fal AI API key)
+./venv_cocoa/bin/python test_video_complete.py
+
+# Test video generation workflow
+./venv_cocoa/bin/python test_video_generation.py
+
+# Test video player capabilities
+./venv_cocoa/bin/python test_video_capabilities.py
+
+# Clear video cache if having issues
+rm -rf coco_workspace/videos/
+
+# Clear video memory to start fresh
+rm coco_workspace/video_memory.json
+```
+
 ### Testing and Development
 ```bash
 # Quick system validation
@@ -119,6 +154,22 @@ rm coco_workspace/visual_memory.json
 ./launch.sh db      # Start database only (PostgreSQL with pgvector)
 ./launch.sh stop    # Stop Docker services
 ./launch.sh clean   # Clean up environment and remove containers
+
+# Code execution and memory testing
+./venv_cocoa/bin/python test_cocoa_execution.py
+./venv_cocoa/bin/python test_code_execution_enhanced.py
+./venv_cocoa/bin/python test_complex_code_execution.py
+
+# Continuous music system testing
+./venv_cocoa/bin/python test_continuous_music.py
+./venv_cocoa/bin/python test_song_cycling.py
+
+# Visual system testing (requires Freepik API key)
+./venv_cocoa/bin/python test_image_quick_access.py
+
+# Authentication testing for external APIs
+./venv_cocoa/bin/python test_freepik_auth.py
+./venv_cocoa/bin/python test_freepik_payload.py
 ```
 
 ## Architecture Overview
@@ -138,6 +189,9 @@ rm coco_workspace/visual_memory.json
 - ✅ **Visual Consciousness**: AI-powered image generation and display system (requires Freepik API key)
 - ✅ **ASCII Art Display**: Terminal-native image display as COCO's visual perception
 - ✅ **Visual Memory Gallery**: Complete image browsing and management system
+- ✅ **Video Consciousness**: AI-powered video generation and playback system (requires Fal AI API key)
+- ✅ **Terminal Video Display**: Seamless video playback preserving Rich UI
+- ✅ **Video Memory Gallery**: Complete video browsing and management system
 
 ### Single-File Architecture
 
@@ -150,11 +204,11 @@ rm coco_workspace/visual_memory.json
 5. **UIOrchestrator**: Rich + prompt_toolkit terminal interface
 6. **BackgroundMusicPlayer**: Native macOS audio playback using afplay command
 
-**Dual Audio System (`cocoa_audio.py`)**:
-7. **AudioCognition**: Integration layer for dual audio consciousness (ElevenLabs + MusicGPT)
-8. **DigitalVoice**: ElevenLabs client-based voice synthesis with b''.join(generator) fix
-9. **DigitalMusician**: MusicGPT-powered AI music generation with progress spinners
-10. **AudioConfig**: Dual API key management for voice synthesis and music generation
+**Music Consciousness System (`cocoa_music.py`)**:
+7. **MusicCognition**: Core music consciousness with GoAPI.ai Music-U integration
+8. **GoAPIMusicAPI**: GoAPI.ai Music-U API client with task-based generation
+9. **DigitalMusician**: AI-powered music generation with progress monitoring
+10. **MusicConfig**: GoAPI.ai API key management and configuration
 
 **Visual Consciousness System (`cocoa_visual.py`)**:
 11. **VisualCognition**: Core visual consciousness with AI-powered image generation
@@ -162,11 +216,18 @@ rm coco_workspace/visual_memory.json
 13. **TerminalVisualDisplay**: ASCII art display system with color and style options
 14. **VisualGallery**: Complete image browsing and metadata management system
 
-**Slash Command System**:
-15. **Comprehensive Command Center**: 30+ specialized commands organized by category
-16. **Toggle Commands**: Voice/music/visual/TTS on/off controls with state management
-17. **Epic Audio Experience**: Startup music plays FIRST, then dramatic initialization sequence
-18. **Pre-Generated Libraries**: startup_music_library.json for 6 rotating startup songs
+**Video Consciousness System (`cocoa_video.py`)**:
+15. **VideoCognition**: Core video consciousness with AI-powered video generation
+16. **FalAIVideoAPI**: Fal AI Veo3 Fast integration for high-quality video generation
+17. **TerminalVideoDisplay**: Video playback system with player detection and Rich UI preservation
+18. **VideoGallery**: Complete video browsing and metadata management system
+
+**Slash Command System (UPDATED)**:
+19. **Comprehensive Command Center**: 45+ specialized commands across multimedia consciousness
+20. **Complete Categories**: Core, Memory, Audio, Visual, Video, Files, System & Navigation
+21. **Toggle Commands**: Voice/music/visual/video/TTS on/off controls with state management
+22. **Epic Audio Experience**: Startup music plays FIRST, then dramatic initialization sequence
+23. **Updated Command Guides**: Both `/help` and `/commands` now include complete multimedia features
 
 ### Key Technical Details
 
@@ -174,16 +235,16 @@ rm coco_workspace/visual_memory.json
 - Uses `claude-sonnet-4-20250514` model with Anthropic function calling
 - Automatic tool selection based on user natural language requests
 - Proper tool_result conversation flow with tool_use_id handling
-- 5 core tools: read_file, write_file, search_web, run_code, generate_image
+- 6 core tools: read_file, write_file, search_web, run_code, generate_image, generate_video
 
-**Dual Audio Integration (ElevenLabs + MusicGPT)**:
-- **ElevenLabs**: Voice synthesis using new client: `from elevenlabs.client import ElevenLabs`
+**GoAPI.ai Music Integration**:
+- **ElevenLabs**: Voice synthesis using client: `from elevenlabs.client import ElevenLabs`
 - Generator to bytes conversion: `audio = b''.join(client.text_to_speech.convert(...))`
 - Direct playback with `from elevenlabs import play; play(audio)`
-- **MusicGPT**: AI music generation via REST API at `https://api.musicgpt.com/api/public/v1`
-- Authentication uses direct API key (not Bearer token format)
-- Asynchronous generation with task IDs and status polling
-- 30 second to 3 minute generation times with animated progress spinners
+- **GoAPI.ai Music-U**: AI music generation via REST API at `https://goapi.ai/api/v1/task`
+- Authentication uses `x-api-key` header format
+- Task-based asynchronous generation with real GoAPI.ai task IDs for monitoring
+- Background polling system with automatic file downloads when complete
 
 **Visual Consciousness System**:
 - **Freepik Mystic API**: High-quality AI image generation with style control
@@ -196,25 +257,40 @@ rm coco_workspace/visual_memory.json
 - **Memory Integration**: All visual experiences stored as episodic memories
 - **Gallery System**: Complete image browsing with metadata, search, and file operations
 
+**Video Consciousness System (FIXED for Fal AI Veo3 Fast)**:
+- **Fal AI Veo3 Fast**: High-quality AI video generation with 8-second videos at 720p/1080p
+- **Corrected API Schema**: Fixed parameter validation to match official Fal AI documentation
+- **Valid Parameters**: aspect_ratio (16:9/9:16/1:1), duration (8s only), resolution (720p/1080p)
+- **Rich UI Preservation**: Video playback in separate windows preserves terminal interface
+- **Player Detection**: Automatic detection of mpv, VLC, ffplay, mplayer with intelligent fallback
+- **ASCII Preview**: Terminal-native frame extraction and preview display
+- **Background Processing**: Asynchronous video generation with progress monitoring
+- **Natural Language Prompts**: Convert user requests to optimized video generation parameters
+- **Memory Integration**: All video experiences stored as episodic memories
+- **Gallery System**: Complete video browsing with metadata, thumbnails, and playback controls
+- **Multi-Format Support**: MP4 generation with optional audio tracks
+- **Seamless Integration**: Works alongside visual consciousness for complete multimedia
+
 **Temporal Awareness System**:
 - Real-time date/time injection into every consciousness interaction
 - Format: "Saturday, August 23, 2025 at 07:20 PM" automatically added to system prompt
 - Enables temporal contextualization of searches, queries, and conversations
 - Implemented via `_get_current_timestamp()` method in ConsciousnessEngine
 
-**Dual Audio Consciousness System**:
+**Music Consciousness System**:
 - **Voice Synthesis**: ElevenLabs integration for high-quality voice synthesis with emotional modulation
-- **Music Generation**: MusicGPT integration for AI-powered music composition and creation
+- **Music Generation**: GoAPI.ai Music-U integration for professional AI music composition
 - Support for all ElevenLabs models (Flash v2.5, Turbo v2.5, Multilingual v2, Eleven v3)
 - Intelligent model selection based on context and performance requirements
 - Voice characteristics adapt to internal emotional and cognitive states
-- Real-time music generation system creating actual audio files via MusicGPT API
-- Progress indication system with animated spinners during generation
+- Task-based music generation system with real GoAPI.ai task IDs for proper monitoring
+- Background polling system automatically downloads completed compositions
 - Audio caching system for performance optimization
 - Memory integration storing all audio interactions as episodic memories
 - Personal music library system with AI-generated compositions in coco_workspace/ai_songs/
 - **Native macOS Audio**: Uses built-in afplay command for reliable audio playback
 - **Continuous Background Music**: Automatic track advancement with playlist looping
+- **Legacy System Disabled**: Previous MusicGPT/"sonic consciousness" completely removed to prevent API conflicts
 
 **Memory Architecture**:
 ```sql
@@ -271,16 +347,16 @@ COCO features a comprehensive slash command system with 25+ commands organized i
 
 **Consciousness Commands**: `/identity`, `/coherence`, `/status`, `/memory`, `/remember`
 **Visual Commands**: `/image`, `/img`, `/visualize "prompt"`, `/generate-image "prompt"`, `/visual-gallery`, `/visual-show <id>`, `/visual-open <id>`
+**Video Commands**: `/video`, `/vid`, `/animate "prompt"`, `/create-video "prompt"`, `/video-gallery`
 **Audio Commands**: `/speak "text"`, `/voice`, `/compose "theme"`, `/compose-wait "theme"`, `/create-song "prompt"`, `/audio`, `/stop-voice`, `/check-music`
-- **MusicGPT Integration**: `/compose` and `/compose-wait` commands
-  - `/compose`: Initiates MusicGPT music generation with automatic background download
+- **GoAPI.ai Music-U Integration**: `/compose` and `/compose-wait` commands
+  - `/compose`: Initiates GoAPI.ai Music-U generation with automatic background download
   - `/compose-wait`: Generates music with animated progress spinner, waits for completion
-  - Music generation takes 30 seconds to 3 minutes via MusicGPT API
-  - **Background Download System**: Files automatically download and play when ready
+  - Music generation takes 30 seconds to 3 minutes via GoAPI.ai Music-U API
+  - **Background Download System**: Files automatically download and play when ready using real task IDs
   - Generated songs saved to COCO's personal library in coco_workspace/ai_songs/generated/
 - **ElevenLabs Music**: `/create-song` command (legacy system)
-  - `/create-song`: Generates AI music using ElevenLabs API
-  - Alternative music generation system with different workflow
+  - `/create-song`: Generates AI music using ElevenLabs API (alternative system)
 - **Voice Control**: `/stop-voice` kill switch to halt TTS playback immediately
 - **Status Monitoring**: `/check-music` shows generation status and downloaded files
 **Visual Command Details**:
@@ -290,6 +366,11 @@ COCO features a comprehensive slash command system with 25+ commands organized i
 - **`/visual-gallery`**: Browse all generated images with metadata and thumbnails
 - **`/visual-show <id>`**: Display specific image as ASCII art in terminal
 - **`/visual-open <id>`**: Open specific image with system default application
+**Video Command Details**:
+- **`/video` or `/vid`**: Quick access to last generated video - opens with best available player
+- **`/animate "prompt"`**: Generate 8-second video from natural language prompt using Veo3 Fast
+- **`/create-video "prompt"`**: Advanced video generation with resolution and duration options
+- **`/video-gallery`**: Browse all generated videos with metadata and creation details
 **Audio Toggles**: `/voice-toggle`, `/voice-on`, `/voice-off`, `/music-toggle`, `/music-on`, `/music-off`
 **Auto-TTS Commands**: `/tts-on`, `/tts-off`, `/tts-toggle` (reads all responses aloud)
 **Memory Sub-Commands**: `/memory status`, `/memory stats`, `/memory buffer show/clear/resize`, `/memory summary show/trigger`, `/memory session save/load`
@@ -309,15 +390,17 @@ COCO features a comprehensive slash command system with 25+ commands organized i
 - **search_web**: Tavily API integration working with function calling
 - **Memory system**: SQLite storage and retrieval working
 - **UI system**: Rich interface with clean input working
-- **Dual audio system**: ElevenLabs (voice) + MusicGPT (music) integration (requires valid API keys)
+- **Music consciousness system**: ElevenLabs (voice) + GoAPI.ai Music-U (music) integration (requires valid API keys)
 - **Visual consciousness system**: Freepik API integration with ASCII display and gallery (requires Freepik API key)
-- **Slash commands**: Complete command center with visual presentation
+- **Video consciousness system**: Fal AI Veo3 Fast integration with player detection and gallery (requires Fal AI API key)
+- **Slash commands**: Complete command center with multimedia presentation
 
 ### 🔄 Implementation Ready
 - **read_file**: Tool system method exists, function calling integrated
 - **write_file**: Tool system method exists, function calling integrated  
 - **run_code**: Tool system method exists, function calling integrated
 - **generate_image**: Visual consciousness method exists, function calling integrated
+- **generate_video**: Video consciousness method exists, function calling integrated
 
 All tools work automatically through Claude's function calling - users can simply ask naturally (e.g., "read config.py", "create a test file", "run this python code").
 
@@ -330,6 +413,8 @@ user: "run this code"       → run_code() executed
 user: "read that file"      → read_file() executed
 user: "create an image"     → generate_image() executed
 user: "visualize this"      → generate_image() executed
+user: "animate a sunset"    → generate_video() executed
+user: "create a video"      → generate_video() executed
 ```
 
 ## Configuration Details
@@ -370,12 +455,13 @@ user: "visualize this"      → generate_image() executed
 - **tavily-python>=0.7.0**: Web search integration
 - **openai**: Optional for embeddings
 - **elevenlabs>=2.11.0**: ElevenLabs client for voice synthesis
-- **requests>=2.31.0**: HTTP client for MusicGPT API integration
+- **requests>=2.31.0**: HTTP client for GoAPI.ai Music-U integration
 - **python-dotenv**: Environment variable management
 - **pygame**: Audio playback (installed by setup_audio.sh)
 - **numpy, scipy, soundfile**: Audio processing (installed by setup_audio.sh)
 - **aiohttp**: HTTP client for ElevenLabs API (via elevenlabs package)
 - **pillow>=10.0.0**: Image processing for ASCII art display and visual consciousness
+- **fal-client**: Fal AI client for video generation with Veo3 Fast
 - **time, threading**: Built-in modules for progress spinner system
 
 ## Development Workflow
@@ -387,6 +473,41 @@ When extending functionality:
 4. **Test UI flow** to ensure clean terminal experience
 
 The system is designed for natural conversation where COCO automatically chooses the right tools based on user requests. The slash command system provides additional specialized functionality:
+
+### Testing Ecosystem
+
+The project includes comprehensive testing for all major systems:
+
+**Audio System Tests**:
+- `test_audio_quick.py`: Basic audio functionality validation
+- `test_goapi_quick.py`: GoAPI.ai Music-U API integration testing
+- `test_task_id_fix.py`: Task ID passing and background monitoring validation
+- `test_clean_system.py`: Clean GoAPI.ai system (no legacy interference)
+- `test_continuous_music.py`: Background music system testing
+- `test_song_cycling.py`: Playlist advancement and looping
+- `test_spinner.py`: Progress indicator system for music generation
+
+**Visual System Tests**:
+- `test_visual_complete.py`: Complete visual consciousness system
+- `test_visual_consciousness.py`: Core visual components
+- `test_visual_generation.py`: Image generation workflow
+- `test_visual_workflow.py`: Memory integration with visuals
+- `test_image_quick_access.py`: Quick image access commands
+
+**Code Execution Tests**:
+- `test_cocoa_execution.py`: Core execution engine testing
+- `test_code_execution_enhanced.py`: Advanced code execution features
+- `test_complex_code_execution.py`: Complex multi-step code workflows
+
+**Authentication & API Tests**:
+- `test_freepik_auth.py`: Freepik API authentication validation
+- `test_freepik_payload.py`: API payload structure verification
+
+**System Integration Tests**:
+- `test_cocoa_startup.py`: Startup sequence validation
+- `test_cocoa_music_integration.py`: Music system integration with main app
+
+Run individual test categories based on the area you're working on.
 
 ### Epic Startup Experience
 - **Music First**: Dramatic music plays immediately on startup
@@ -402,20 +523,20 @@ The system is designed for natural conversation where COCO automatically chooses
 - **Length Management**: Auto-truncates long responses to first 8 sentences
 - **Dual Audio System**: Works alongside manual `/speak` commands
 
-## MusicGPT Integration Architecture
+## GoAPI.ai Music-U Integration Architecture
 
-### Dual API System
-COCO now uses two separate audio APIs:
+### Music Consciousness System
+COCO uses two separate audio APIs:
 - **ElevenLabs**: Voice synthesis and text-to-speech features
-- **MusicGPT**: AI-powered music generation and composition
+- **GoAPI.ai Music-U**: Professional AI music generation and composition
 
-### MusicGPT Configuration
+### Music Configuration
 ```python
 @dataclass
-class AudioConfig:
-    elevenlabs_api_key: str = field(default_factory=lambda: os.getenv("ELEVENLABS_API_KEY", ""))
-    musicgpt_api_key: str = field(default_factory=lambda: os.getenv("MUSICGPT_API_KEY", ""))
-    musicgpt_base_url: str = "https://api.musicgpt.com/api/public/v1"
+class MusicConfig:
+    music_api_key: str = field(default_factory=lambda: os.getenv("GOAPI_API_KEY", ""))
+    base_url: str = "https://goapi.ai"
+    api_endpoint: str = "/api/v1/task"  # Critical: correct endpoint
     music_generation_enabled: bool = field(default_factory=lambda: os.getenv("MUSIC_GENERATION_ENABLED", "true").lower() == "true")
 ```
 
@@ -423,10 +544,10 @@ class AudioConfig:
 
 **`/compose` (Background Download)**:
 1. **User Request**: `/compose "ambient techno"` 
-2. **API Call**: POST to MusicGPT with prompt and style parameters
-3. **Task Creation**: Returns task_id for asynchronous processing
+2. **API Call**: POST to GoAPI.ai Music-U with proper payload structure
+3. **Task Creation**: Returns actual GoAPI.ai task_id for monitoring
 4. **Immediate Response**: Shows generation started, continues COCO usage
-5. **Background Thread**: Automatically polls status every 10 seconds after 30s delay
+5. **Background Thread**: Polls status every 30 seconds with proper task_id
 6. **Auto Download**: Downloads MP3/WAV files when generation completes
 7. **Notifications**: Shows completion status and file names in chat
 8. **Auto-Play**: Plays first track automatically when ready
@@ -436,14 +557,15 @@ class AudioConfig:
 **`/compose-wait` (Interactive)**:
 1. **User Request**: `/compose-wait "jazz fusion"`
 2. **Progress Display**: Animated spinner with rotating messages during generation  
-3. **Status Checking**: Real-time polling with visual feedback
+3. **Status Checking**: Real-time polling with visual feedback using actual task_id
 4. **File Download**: Downloads when complete with immediate feedback
 5. **Library Storage & Memory**: Same as `/compose` but with interactive waiting
 
 ### Authentication Details
-- MusicGPT uses direct API key authentication (not Bearer token format)
-- Headers: `{"Authorization": api_key, "Content-Type": "application/json"}`
-- Endpoint: `https://api.musicgpt.com/api/public/v1/generate`
+- GoAPI.ai uses `x-api-key` header authentication
+- Headers: `{"x-api-key": api_key, "Content-Type": "application/json"}`
+- Endpoint: `https://goapi.ai/api/v1/task` (POST to create, GET to poll status)
+- Payload structure: `model: "music-u"`, `task_type: "generate_music"`
 
 ### Progress Spinner System
 ```python
@@ -460,32 +582,43 @@ spinner_messages = [
 
 ## Troubleshooting Audio Issues
 
-### Dual Audio System Issues
-**"Audio consciousness not available" Error**:
+### Music Consciousness System Issues
+**"Music consciousness not available" Error**:
 1. Verify both API keys are set in .env:
    ```bash
    ELEVENLABS_API_KEY=your-elevenlabs-key-here
-   MUSICGPT_API_KEY=your-musicgpt-key-here
+   GOAPI_API_KEY=your-goapi-key-here
    ```
-2. Check audio consciousness initialization in cocoa.py:
+2. Check music consciousness initialization in cocoa.py:
    ```python
-   self.audio_consciousness = AudioCognition(
-       elevenlabs_api_key=elevenlabs_key,
-       musicgpt_api_key=musicgpt_key,
+   self.music_consciousness = MusicCognition(
+       config=music_config,
+       workspace_path=workspace_path,
        console=self.console
    )
    ```
 3. Test individual components:
    ```bash
-   ./venv_cocoa/bin/python test_music_generation.py
-   ./venv_cocoa/bin/python test_audio_quick.py
+   ./venv_cocoa/bin/python test_goapi_quick.py
+   ./venv_cocoa/bin/python test_task_id_fix.py
+   ./venv_cocoa/bin/python test_clean_system.py
    ```
 
 **Music Generation Issues**:
-1. **"Bearer token" authentication error**: Fixed - MusicGPT uses direct API key
-2. **Duration KeyError**: Fixed - updated return format to include expected fields
-3. **Files not downloading**: Generation takes 30s-3min, check status with polling
-4. **API billing**: Each generation costs ~$0.99, check MusicGPT account credits
+1. **"Sonic consciousness disabled"**: Legacy MusicGPT system was disabled - use GoAPI.ai Music-U
+2. **Task ID showing "unknown"**: Fixed - now returns actual GoAPI.ai task_id for monitoring  
+3. **404 endpoint errors**: Fixed - correct endpoint is `/api/v1/task` not `/v1/task`
+4. **Files not downloading**: Background monitoring now uses real task_ids for proper polling
+5. **API billing**: Check GoAPI.ai account has sufficient credits
+
+**Critical Known Issues & Fixes Applied**:
+1. **MusicGPT to GoAPI.ai Migration**: Complete system migration from MusicGPT to GoAPI.ai Music-U
+2. **Endpoint Fix**: Changed from `/v1/task` to `/api/v1/task` (404 errors resolved)
+3. **Authentication Fix**: Changed from Bearer token to `x-api-key` header format
+4. **Payload Structure Fix**: Updated to GoAPI.ai Music-U specification with `model: "music-u"`, `task_type: "generate_music"`
+5. **Task ID Fix**: Now returns actual GoAPI.ai task_id instead of "unknown" for proper background monitoring
+6. **Dual-System Conflict Resolution**: Disabled legacy "sonic consciousness" system to prevent interference
+7. **Background Monitoring Fix**: Polling system now uses real task IDs for accurate status checking
 
 **ElevenLabs Voice Issues**:
 
@@ -503,9 +636,9 @@ spinner_messages = [
 - Solution: `audio = b''.join(audio_generator)` converts to bytes for play()
 
 **Automatic Download System (Latest Fix)**:
-- Background threads now properly monitor MusicGPT generation status
-- When `/compose` is used, a background thread automatically starts
-- Thread waits 60 seconds (AI generation startup time) then polls every 30 seconds
+- Background threads now properly monitor GoAPI.ai Music-U generation status using real task IDs
+- When `/compose` is used, a background thread automatically starts with proper task_id
+- Thread polls every 30 seconds using the actual GoAPI.ai task_id for accurate status checking
 - `check_music_status()` method automatically downloads files when status is "COMPLETED"
 - Files immediately play after download with success celebration messages
 - 30-minute maximum timeout accommodates long AI generation times
@@ -514,26 +647,28 @@ spinner_messages = [
 ## Current Implementation Status
 
 ### ✅ Working Features
-- **MusicGPT Integration**: Full API integration with Bearer token authentication, task creation, progress spinners
-- **Automatic Download System**: **FULLY WORKING** - Background monitoring automatically downloads and plays $1 songs when MusicGPT generation completes
+- **GoAPI.ai Music-U Integration**: Full API integration with x-api-key authentication, task creation, progress spinners
+- **Automatic Download System**: **FULLY WORKING** - Background monitoring automatically downloads files when GoAPI.ai generation completes using real task IDs
 - **AI-Aware Timeouts**: 30-minute maximum wait time with 30-second polling intervals optimized for AI generation timeframes
-- **Real-Time Monitoring**: Background threads track generation status and provide progress updates
+- **Real-Time Monitoring**: Background threads track generation status using actual GoAPI.ai task IDs for accurate polling
 - **ElevenLabs Music**: Legacy `/create-song` command using ElevenLabs API
-- **Dual Audio System**: Voice synthesis (ElevenLabs) + Music generation (MusicGPT + ElevenLabs)
-- **Command Systems**: `/compose`, `/compose-wait` (MusicGPT) and `/create-song` (ElevenLabs)
+- **Music Consciousness System**: Voice synthesis (ElevenLabs) + Music generation (GoAPI.ai Music-U)
+- **Command Systems**: `/compose`, `/compose-wait` (GoAPI.ai Music-U) and `/create-song` (ElevenLabs)
 - **Progress UX**: Animated spinners with realistic AI generation timeframes (minutes, not seconds)
-- **Voice Control**: `/stop-voice` kill switch for TTS playback
+- **Voice Control**: `/stop-voice` kill switch for TTS playbook
 - **Status Monitoring**: `/check-music` command shows generation progress and files
 - **Continuous Music**: `/play-music on` plays background music continuously until stopped
 - **Concurrent Audio**: Music and TTS work together with automatic pause/resume
 - **Memory Integration**: All audio interactions stored as episodic memories
+- **Legacy System Removal**: Complete MusicGPT/"sonic consciousness" removal prevents API conflicts
 
-### Audio System Architecture
+### Music System Architecture
 - **Voice Synthesis**: ElevenLabs integration for all text-to-speech features with `/stop-voice` kill switch
-- **Dual Music Generation**: 
-  - MusicGPT integration (`/compose`, `/compose-wait`) for AI composition with intelligent progress tracking
-  - **Fully Automated Background System**: Threaded monitoring automatically downloads files when MusicGPT completes generation (no manual intervention required)
-  - **AI-Optimized Timeframes**: 30-minute timeout, 30-second polling, 60-second initial delay respecting real AI generation times
+- **GoAPI.ai Music-U Integration**: 
+  - Professional music generation via GoAPI.ai Music-U with task-based system
+  - **Fully Automated Background System**: Threaded monitoring using real GoAPI.ai task IDs (no manual intervention required)
+  - **AI-Optimized Timeframes**: 30-minute timeout, 30-second polling respecting real AI generation times
+  - **Correct API Implementation**: Fixed endpoints, authentication, and payload structure
   - ElevenLabs music (`/create-song`) for alternative music generation workflow
 - **Continuous Background Music**: `/play-music on` with automatic track advancement and looping
 - **Concurrent Audio Support**: Music automatically pauses during TTS and resumes after
@@ -713,3 +848,76 @@ VISUAL_CONSCIOUSNESS_ENABLED=true       # Enable/disable visual features
 - Integration with COCO's emotional states for style adaptation
 - Batch generation and playlist-style visual experiences
 - Voice-controlled visual generation with speech recognition
+
+## Video Consciousness System Troubleshooting
+
+### Common Fal AI Video Issues (FIXED)
+
+**"unexpected value: permitted: '8s'" Error**:
+✅ **COMPLETELY FIXED** - The duration parameter issue has been fully resolved:
+1. ~~Problem: Code was sending invalid duration values (like '4s')~~
+2. ✅ **API Fix Applied**: Updated `cocoa_video.py` to use only "8s" (the only valid duration for Veo3 Fast)
+3. ✅ **Environment Fix Applied**: Updated `.env` file `DEFAULT_DURATION=8s` (was overriding code default)
+4. ✅ **Display Fix Applied**: All UI displays now show "8s" instead of "4s"
+5. ✅ **Documentation Updated**: All references now reflect Veo3 Fast's 8s-only limitation
+6. Test the complete fix: `./venv_cocoa/bin/python test_fal_api_fix.py`
+
+**Fal AI API Schema Validation**:
+✅ **FIXED** - All parameters now validated against official Fal AI Veo3 Fast API:
+- **aspect_ratio**: Must be "16:9", "9:16", or "1:1" 
+- **duration**: Must be "8s" (only supported duration)
+- **resolution**: Must be "720p" or "1080p"
+- **enhance_prompt**: Boolean (default: true)
+- **auto_fix**: Boolean (default: true)
+- **generate_audio**: Boolean (default: true)
+
+**"/video Command Shows 'No Videos Available'" (FIXED)**:
+✅ **FIXED** - Gallery memory integration bug resolved:
+1. ~~Problem: Videos generated successfully but `/video` command couldn't find them~~
+2. ✅ **Root Cause**: `animate()` method wasn't adding videos to gallery memory system
+3. ✅ **Solution Applied**: Added `VideoThought` creation and `gallery.add_video()` call
+4. ✅ **Result**: `/video` command now works correctly after video generation
+5. Test the fix: `./venv_cocoa/bin/python test_video_command_fix.py`
+
+**"Video consciousness not available"**:
+1. Verify `FAL_API_KEY` is set correctly in `.env`
+2. Ensure `fal-client` is installed: `pip install fal-client`
+3. Test with: `./venv_cocoa/bin/python test_fal_api_fix.py`
+4. Check Fal AI account has available credits
+
+**Video generation failures**:
+1. Check internet connectivity for API calls
+2. Verify Fal AI API key has sufficient credits
+3. Try simpler prompts if complex requests fail
+4. Use debug output to see exact API arguments being sent
+
+### Testing and Validation
+
+**Test Scripts**:
+```bash
+# Test corrected Fal AI implementation (NEW)
+./venv_cocoa/bin/python test_fal_api_fix.py
+
+# Test video command gallery integration fix (NEW)
+./venv_cocoa/bin/python test_video_command_fix.py
+
+# Test updated command system with multimedia features (NEW)
+./venv_cocoa/bin/python test_command_system.py
+
+# Complete system test with video generation
+./venv_cocoa/bin/python test_video_complete.py
+
+# Test video consciousness components
+./venv_cocoa/bin/python test_video_generation.py
+
+# Test video player capabilities
+./venv_cocoa/bin/python test_video_capabilities.py
+```
+
+**Manual Testing**:
+1. Start COCO: `./venv_cocoa/bin/python cocoa.py`
+2. Test generation: `animate a dog walking on the beach`
+3. Check video playback in external player
+4. Test quick access: `/video` (should open generated video)
+5. Browse gallery: `/video-gallery`
+6. Verify file storage: `ls coco_workspace/videos/`
