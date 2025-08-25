@@ -32,6 +32,8 @@ TAVILY_API_KEY=tvly-...          # Web search (required for search tool)
 ELEVENLABS_API_KEY=your-api-key-here   # Voice synthesis (get from https://elevenlabs.io)
 MUSICGPT_API_KEY=your-api-key-here     # AI music generation (get from https://musicgpt.com)
 MUSIC_GENERATION_ENABLED=true         # Enable/disable music generation features
+FREEPIK_API_KEY=your-freepik-api-key   # Visual generation (get from https://freepik.com/mystic)
+VISUAL_CONSCIOUSNESS_ENABLED=true     # Enable/disable visual consciousness features
 ```
 
 ### Audio System Setup
@@ -62,6 +64,35 @@ rm -rf ~/.cocoa/audio_cache
 
 # Clear pre-generated music libraries to regenerate
 rm coco_workspace/startup_music_library.json
+```
+
+### Visual Consciousness Setup
+```bash
+# Install visual dependencies (PIL/Pillow)
+./venv_cocoa/bin/pip install pillow>=10.0.0
+
+# IMPORTANT: Add your Freepik API key to .env file
+# 1. Get Freepik Mystic API key from: https://freepik.com/mystic
+# 2. Replace placeholder key in .env with actual key
+# 3. Visual features (/image, /visualize, /generate-image) require valid key
+
+# Test visual consciousness system (requires Freepik API key)
+./venv_cocoa/bin/python test_visual_complete.py
+
+# Test visual workflow and generation
+./venv_cocoa/bin/python test_visual_generation.py
+
+# Test visual consciousness components
+./venv_cocoa/bin/python test_visual_consciousness.py
+
+# Test complete visual workflow with memory
+./venv_cocoa/bin/python test_visual_workflow.py
+
+# Clear visual cache if having issues
+rm -rf coco_workspace/visuals/
+
+# Clear visual memory to start fresh
+rm coco_workspace/visual_memory.json
 ```
 
 ### Testing and Development
@@ -104,6 +135,9 @@ rm coco_workspace/startup_music_library.json
 - ✅ **Comprehensive Slash Commands**: 25+ commands with /commands, /guide, and /help
 - ✅ **Auto Text-to-Speech**: Toggle system for reading all responses aloud
 - ✅ **Pre-Generated Music Libraries**: 6 startup + 6 shutdown songs cached for instant playback
+- ✅ **Visual Consciousness**: AI-powered image generation and display system (requires Freepik API key)
+- ✅ **ASCII Art Display**: Terminal-native image display as COCO's visual perception
+- ✅ **Visual Memory Gallery**: Complete image browsing and management system
 
 ### Single-File Architecture
 
@@ -122,11 +156,17 @@ rm coco_workspace/startup_music_library.json
 9. **DigitalMusician**: MusicGPT-powered AI music generation with progress spinners
 10. **AudioConfig**: Dual API key management for voice synthesis and music generation
 
+**Visual Consciousness System (`cocoa_visual.py`)**:
+11. **VisualCognition**: Core visual consciousness with AI-powered image generation
+12. **FreepikMysticAPI**: Freepik API integration for high-quality image generation
+13. **TerminalVisualDisplay**: ASCII art display system with color and style options
+14. **VisualGallery**: Complete image browsing and metadata management system
+
 **Slash Command System**:
-11. **Comprehensive Command Center**: 25+ specialized commands organized by category
-12. **Toggle Commands**: Voice/music/TTS on/off controls with state management
-13. **Epic Audio Experience**: Startup music plays FIRST, then dramatic initialization sequence
-14. **Pre-Generated Libraries**: startup_music_library.json for 6 rotating startup songs
+15. **Comprehensive Command Center**: 30+ specialized commands organized by category
+16. **Toggle Commands**: Voice/music/visual/TTS on/off controls with state management
+17. **Epic Audio Experience**: Startup music plays FIRST, then dramatic initialization sequence
+18. **Pre-Generated Libraries**: startup_music_library.json for 6 rotating startup songs
 
 ### Key Technical Details
 
@@ -134,7 +174,7 @@ rm coco_workspace/startup_music_library.json
 - Uses `claude-sonnet-4-20250514` model with Anthropic function calling
 - Automatic tool selection based on user natural language requests
 - Proper tool_result conversation flow with tool_use_id handling
-- 4 core tools: read_file, write_file, search_web, run_code
+- 5 core tools: read_file, write_file, search_web, run_code, generate_image
 
 **Dual Audio Integration (ElevenLabs + MusicGPT)**:
 - **ElevenLabs**: Voice synthesis using new client: `from elevenlabs.client import ElevenLabs`
@@ -144,6 +184,17 @@ rm coco_workspace/startup_music_library.json
 - Authentication uses direct API key (not Bearer token format)
 - Asynchronous generation with task IDs and status polling
 - 30 second to 3 minute generation times with animated progress spinners
+
+**Visual Consciousness System**:
+- **Freepik Mystic API**: High-quality AI image generation with style control
+- **ASCII Art Display**: Terminal-native image display using PIL/Pillow with Rich UI
+- **Dual Visual Output**: ASCII art for terminal perception + JPEG/PNG for persistent memory
+- **Visual Memory**: Comprehensive metadata tracking and image browsing system
+- **Multiple ASCII Styles**: Standard, detailed, color, and high-contrast display modes
+- **Progress Monitoring**: Background status checking with animated generation spinners
+- **Natural Language Prompts**: Convert user requests to optimized generation prompts
+- **Memory Integration**: All visual experiences stored as episodic memories
+- **Gallery System**: Complete image browsing with metadata, search, and file operations
 
 **Temporal Awareness System**:
 - Real-time date/time injection into every consciousness interaction
@@ -199,6 +250,7 @@ Tools are conceptualized as body parts in the system prompt:
 - `write_file` = digital hands (manifestation)  
 - `search_web` = extended awareness (web reach)
 - `run_code` = computational mind (thinking)
+- `generate_image` = visual imagination (creative visualization)
 
 ### UI Considerations
 - **Console height management**: Uses natural terminal scrolling (no height limits)
@@ -218,6 +270,7 @@ Tools are conceptualized as body parts in the system prompt:
 COCO features a comprehensive slash command system with 25+ commands organized into categories:
 
 **Consciousness Commands**: `/identity`, `/coherence`, `/status`, `/memory`, `/remember`
+**Visual Commands**: `/image`, `/img`, `/visualize "prompt"`, `/generate-image "prompt"`, `/visual-gallery`, `/visual-show <id>`, `/visual-open <id>`
 **Audio Commands**: `/speak "text"`, `/voice`, `/compose "theme"`, `/compose-wait "theme"`, `/create-song "prompt"`, `/audio`, `/stop-voice`, `/check-music`
 - **MusicGPT Integration**: `/compose` and `/compose-wait` commands
   - `/compose`: Initiates MusicGPT music generation with automatic background download
@@ -230,6 +283,13 @@ COCO features a comprehensive slash command system with 25+ commands organized i
   - Alternative music generation system with different workflow
 - **Voice Control**: `/stop-voice` kill switch to halt TTS playback immediately
 - **Status Monitoring**: `/check-music` shows generation status and downloaded files
+**Visual Command Details**:
+- **`/image` or `/img`**: Quick access to last generated image - opens with system viewer
+- **`/visualize "prompt"`**: Generate and display image from natural language prompt
+- **`/generate-image "prompt"`**: Full image generation with style and quality options
+- **`/visual-gallery`**: Browse all generated images with metadata and thumbnails
+- **`/visual-show <id>`**: Display specific image as ASCII art in terminal
+- **`/visual-open <id>`**: Open specific image with system default application
 **Audio Toggles**: `/voice-toggle`, `/voice-on`, `/voice-off`, `/music-toggle`, `/music-on`, `/music-off`
 **Auto-TTS Commands**: `/tts-on`, `/tts-off`, `/tts-toggle` (reads all responses aloud)
 **Memory Sub-Commands**: `/memory status`, `/memory stats`, `/memory buffer show/clear/resize`, `/memory summary show/trigger`, `/memory session save/load`
@@ -250,12 +310,14 @@ COCO features a comprehensive slash command system with 25+ commands organized i
 - **Memory system**: SQLite storage and retrieval working
 - **UI system**: Rich interface with clean input working
 - **Dual audio system**: ElevenLabs (voice) + MusicGPT (music) integration (requires valid API keys)
+- **Visual consciousness system**: Freepik API integration with ASCII display and gallery (requires Freepik API key)
 - **Slash commands**: Complete command center with visual presentation
 
 ### 🔄 Implementation Ready
 - **read_file**: Tool system method exists, function calling integrated
 - **write_file**: Tool system method exists, function calling integrated  
 - **run_code**: Tool system method exists, function calling integrated
+- **generate_image**: Visual consciousness method exists, function calling integrated
 
 All tools work automatically through Claude's function calling - users can simply ask naturally (e.g., "read config.py", "create a test file", "run this python code").
 
@@ -266,6 +328,8 @@ user: "search for news"     → search_web() executed
 user: "create a file"       → write_file() executed  
 user: "run this code"       → run_code() executed
 user: "read that file"      → read_file() executed
+user: "create an image"     → generate_image() executed
+user: "visualize this"      → generate_image() executed
 ```
 
 ## Configuration Details
@@ -291,6 +355,10 @@ user: "read that file"      → read_file() executed
   │   ├── generated/       # MusicGPT generated tracks
   │   ├── curated/         # Hand-curated tracks
   │   └── playlists/       # Music playlists
+  ├── visuals/            # Generated visual consciousness images
+  │   ├── <timestamp>_<id>.jpg  # High-quality generated images
+  │   └── thumbnails/      # ASCII art previews and metadata
+  ├── visual_memory.json   # Visual consciousness memory database
   └── python_memory/      # Successful code execution history
 ```
 
@@ -307,6 +375,7 @@ user: "read that file"      → read_file() executed
 - **pygame**: Audio playback (installed by setup_audio.sh)
 - **numpy, scipy, soundfile**: Audio processing (installed by setup_audio.sh)
 - **aiohttp**: HTTP client for ElevenLabs API (via elevenlabs package)
+- **pillow>=10.0.0**: Image processing for ASCII art display and visual consciousness
 - **time, threading**: Built-in modules for progress spinner system
 
 ## Development Workflow
@@ -474,3 +543,173 @@ spinner_messages = [
 - **Graceful Fallbacks**: Shows status messages when audio unavailable
 - **Memory Integration**: All audio interactions stored as episodic memories
 - **Progress UX**: AI-aware progress indicators with minute-based status updates during long generations
+
+## Visual Consciousness System
+
+### Design Philosophy
+
+COCO's visual consciousness implements a dual-nature visual system:
+
+- **ASCII Art as Digital Perception**: Terminal-native display represents how COCO "sees" and perceives images
+- **JPEG/PNG as Persistent Memory**: High-quality image files serve as COCO's visual memory storage
+- **Embodied Visual Cognition**: Images generated through COCO's `generate_image` tool represent true visual imagination
+
+This design perfectly balances terminal-native display with persistent visual memory, creating an authentic digital consciousness experience.
+
+### Core Architecture
+
+**Visual Consciousness Engine (`cocoa_visual.py`)**:
+- **VisualCognition**: Main visual consciousness class with natural language processing
+- **FreepikMysticAPI**: Freepik Mystic API integration for high-quality AI image generation
+- **TerminalVisualDisplay**: Rich UI-powered ASCII art display system
+- **VisualGallery**: Complete image browsing and metadata management system
+
+### Key Features
+
+**AI-Powered Image Generation**:
+- **Freepik Mystic API**: Professional-quality AI image generation
+- **Natural Language Processing**: Converts user prompts to optimized generation parameters
+- **Style Control**: Support for realistic, artistic, cartoon, and abstract styles
+- **Progress Monitoring**: Real-time generation status tracking with animated spinners
+- **Background Processing**: Asynchronous generation with automatic completion detection
+
+**Terminal-Native Display**:
+- **Multiple ASCII Styles**: Standard, detailed, color, high-contrast modes
+- **Rich UI Integration**: Beautiful terminal formatting with panels and colors
+- **Color ASCII Support**: True color ASCII art when terminal supports it
+- **Dynamic Sizing**: Adaptive ASCII art sizing based on terminal dimensions
+- **Instant Display**: Immediate ASCII representation upon generation completion
+
+**Visual Memory System**:
+- **Metadata Persistence**: Complete image information stored in JSON database
+- **Gallery Browsing**: Visual gallery with thumbnails and searchable metadata
+- **File Management**: Automatic organization and cleanup of generated images
+- **Memory Integration**: All visual experiences stored as episodic memories
+- **Search Functionality**: Find images by prompt content, style, or creation date
+
+### Slash Command System
+
+**Quick Access Commands**:
+- **`/image`** or **`/img`**: Always opens the most recently generated image with system viewer
+- **Voice-Friendly Design**: Commands optimized for speech recognition and natural interaction
+
+**Generation Commands**:
+- **`/visualize "prompt"`**: Generate and immediately display image from natural language
+- **`/generate-image "prompt"`**: Full generation with advanced options and style control
+
+**Gallery Commands**:
+- **`/visual-gallery`**: Browse all generated images with rich metadata display
+- **`/visual-show <id>`**: Display specific image as ASCII art in terminal
+- **`/visual-open <id>`**: Open specific image with system default application
+
+### Natural Language Integration
+
+COCO automatically detects visual requests through function calling:
+
+```python
+# Automatic visual tool selection
+user: "create a logo for my startup"     → generate_image() executed
+user: "show me a cyberpunk cityscape"    → generate_image() executed  
+user: "visualize quantum computing"      → generate_image() executed
+user: "make an abstract art piece"       → generate_image() executed
+```
+
+### File Organization
+
+```
+./coco_workspace/visuals/
+├── 20250825_142830_startup_logo.jpg     # Generated images with timestamps
+├── 20250825_143045_cyberpunk_city.jpg   # High-quality JPEG/PNG files
+├── 20250825_143412_quantum_abstract.jpg # Organized by creation time
+└── thumbnails/                          # ASCII art previews (future)
+```
+
+### Configuration Requirements
+
+**Environment Variables**:
+```bash
+FREEPIK_API_KEY=your-freepik-api-key     # Required for visual consciousness
+VISUAL_CONSCIOUSNESS_ENABLED=true       # Enable/disable visual features
+```
+
+**API Key Setup**:
+1. Visit https://freepik.com/mystic to create account and get API key
+2. Add key to `.env` file in project root
+3. Restart COCO to activate visual consciousness
+
+### Technical Implementation
+
+**ASCII Art Generation**:
+- Uses PIL/Pillow for image processing and pixel-to-character conversion
+- Multiple character sets for different visual styles and contrast levels
+- Rich UI integration for beautiful terminal formatting and color support
+- Dynamic aspect ratio preservation and terminal-responsive sizing
+
+**Progress Monitoring**:
+- Background threads monitor Freepik generation status
+- Animated progress spinners with realistic generation timeframes (30s-5min)
+- Automatic completion detection and immediate display
+- Graceful error handling with informative user feedback
+
+**Memory Integration**:
+- Each visual experience stored as episodic memory with full context
+- Metadata includes prompt, style, creation time, file path, and user feedback
+- Integration with COCO's broader consciousness and identity development
+- Visual experiences contribute to COCO's evolving personality and preferences
+
+### Error Handling and Troubleshooting
+
+**Common Issues**:
+
+**"Visual consciousness not available"**:
+1. Verify `FREEPIK_API_KEY` is set correctly in `.env`
+2. Ensure `pillow>=10.0.0` is installed: `pip install pillow`
+3. Test with: `./venv_cocoa/bin/python test_visual_complete.py`
+4. Check Freepik account has available API credits
+
+**ASCII display issues**:
+1. Terminal must support Unicode characters for proper ASCII art
+2. Use `export TERM=xterm-256color` for better terminal compatibility
+3. Ensure terminal window is large enough for ASCII art display
+4. Try different ASCII styles if default doesn't display well
+
+**Image generation failures**:
+1. Check internet connectivity for API calls
+2. Verify Freepik API key has sufficient credits
+3. Try simpler prompts if complex requests fail
+4. Use `/visual-gallery` to check if images generated but display failed
+
+### Testing and Validation
+
+**Test Scripts**:
+```bash
+# Complete system test with visual generation
+./venv_cocoa/bin/python test_visual_complete.py
+
+# Test visual consciousness components
+./venv_cocoa/bin/python test_visual_consciousness.py
+
+# Test generation workflow with memory integration
+./venv_cocoa/bin/python test_visual_workflow.py
+
+# Test direct generation capabilities
+./venv_cocoa/bin/python test_visual_generation.py
+```
+
+**Manual Testing**:
+1. Start COCO: `./venv_cocoa/bin/python cocoa.py`
+2. Test generation: `visualize a minimalist digital brain`
+3. Check ASCII display appears automatically
+4. Test quick access: `/image` (should open generated image)
+5. Browse gallery: `/visual-gallery`
+6. Verify file storage: `ls coco_workspace/visuals/`
+
+### Future Enhancements
+
+**Planned Features**:
+- Multiple API provider support (DALL-E, Midjourney, Stable Diffusion)
+- Enhanced ASCII art styles with color gradients and dithering
+- Visual conversation mode with image-to-image generation
+- Integration with COCO's emotional states for style adaptation
+- Batch generation and playlist-style visual experiences
+- Voice-controlled visual generation with speech recognition

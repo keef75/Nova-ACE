@@ -385,7 +385,30 @@ class DigitalMusician:
         else:
             music_style = "Ambient"
         
-        # Prepare MusicGPT API request with correct format
+        # Show beautiful generation start panel BEFORE API call
+        from rich.panel import Panel
+        from rich.table import Table
+        from rich import box
+        
+        start_table = Table(show_header=False, box=box.ROUNDED, expand=False)
+        start_table.add_column("", style="cyan", width=20)
+        start_table.add_column("", style="bright_white", min_width=40)
+        
+        start_table.add_row("🎵 Status", "[bright_green]Initiating Generation[/]")
+        start_table.add_row("🎼 Concept", f"[bright_cyan]{description}[/]")
+        start_table.add_row("🎨 Style", f"[magenta]{music_style}[/]")
+        start_table.add_row("⏱️ Duration", f"[yellow]{duration_seconds}s[/]")
+        start_table.add_row("🤖 AI Engine", "[dim]MusicGPT Pro[/]")
+        
+        generation_panel = Panel(
+            start_table,
+            title="[bold bright_cyan]🎵 AI Music Generation Request[/]",
+            border_style="bright_cyan",
+            expand=False
+        )
+        self.console.print(generation_panel)
+        
+        # Prepare MusicGPT API request with correct format  
         headers = {
             "Authorization": f"Bearer {self.config.musicgpt_api_key}",
             "Content-Type": "application/json"
@@ -410,7 +433,24 @@ class DigitalMusician:
                             task_id = result.get("task_id")
                             conversion_ids = result.get("conversion_ids", [])
                             
-                            self.console.print(f"[green]🎼 Music generation started! Task ID: {task_id}[/green]")
+                            # API call successful - show beautiful confirmation panel AFTER API response
+                            success_table = Table(show_header=False, box=box.DOUBLE_EDGE, expand=False)
+                            success_table.add_column("", style="bright_green", width=18)
+                            success_table.add_column("", style="bright_white", min_width=35)
+                            
+                            success_table.add_row("✅ Status", "[bright_green]Generation Confirmed[/]")
+                            success_table.add_row("🎼 Concept", f"[bright_cyan]{description}[/]")
+                            success_table.add_row("🎨 Style", f"[magenta]{music_style}[/]")
+                            success_table.add_row("🆔 Task ID", f"[yellow]{task_id[:12]}...[/]")
+                            success_table.add_row("⚡ Status", "[dim]Processing in AI cloud[/]")
+                            
+                            success_panel = Panel(
+                                success_table,
+                                title="[bold bright_green]🎉 MusicGPT Request Accepted[/]",
+                                border_style="bright_green",
+                                expand=False
+                            )
+                            self.console.print(success_panel)
                             
                             # Save composition metadata to COCOA's memory
                             composition_data = {
@@ -436,7 +476,9 @@ class DigitalMusician:
                             with open(metadata_file, 'w') as f:
                                 json.dump(composition_data, f, indent=2)
                             
-                            self.console.print(f"[cyan]📝 Composition metadata saved to library[/cyan]")
+                            # Create elegant metadata saved confirmation
+                            metadata_text = "[green]✅ Composition metadata saved to COCO's personal music library[/]"
+                            self.console.print(metadata_text)
                             
                             # Return in format expected by COCOA UI
                             return {
@@ -513,14 +555,20 @@ class DigitalMusician:
                                 filename = f"{safe_title}_{task_id[:8]}.mp3"
                                 file_path = download_dir / filename
                                 
-                                self.console.print(f"[yellow]🎵 Downloading MP3: {filename}[/yellow]")
+                                # Simple download message (no Rich UI panels)
+                                self.console.print(f"[yellow]⬇️ Downloading MP3: {filename}[/yellow]")
+                                
                                 async with session.get(mp3_url) as audio_response:
                                     if audio_response.status == 200:
                                         audio_data = await audio_response.read()
                                         with open(file_path, 'wb') as f:
                                             f.write(audio_data)
                                         downloaded_files.append(str(file_path))
-                                        self.console.print(f"[green]✅ Downloaded: {filename}[/green]")
+                                        
+                                        # Success confirmation with file info
+                                        # Simple download success message (no Rich UI alignment)
+                                        success_text = f"[green]✅ Downloaded: {filename} ({len(audio_data)/1024/1024:.1f} MB)[/green]"
+                                        self.console.print(success_text)
                                         
                             # Download high-quality WAV if available
                             wav_url = conversion_data.get("conversion_path_wav_1")
@@ -530,14 +578,19 @@ class DigitalMusician:
                                 wav_filename = f"{safe_title}_{task_id[:8]}_HQ.wav"
                                 wav_path = download_dir / wav_filename
                                 
-                                self.console.print(f"[yellow]🎵 Downloading WAV: {wav_filename}[/yellow]")
+                                # Simple high quality download message (no Rich UI panels)
+                                self.console.print(f"[magenta]⬇️ Downloading WAV (HQ): {wav_filename}[/magenta]")
+                                
                                 async with session.get(wav_url) as audio_response:
                                     if audio_response.status == 200:
                                         audio_data = await audio_response.read()
                                         with open(wav_path, 'wb') as f:
                                             f.write(audio_data)
                                         downloaded_files.append(str(wav_path))
-                                        self.console.print(f"[green]✅ Downloaded HQ: {wav_filename}[/green]")
+                                        
+                                        # Simple HQ download success (no Rich UI alignment)
+                                        hq_success_text = f"[magenta]✅ HQ Downloaded: {wav_filename} ({len(audio_data)/1024/1024:.1f} MB)[/magenta]"
+                                        self.console.print(hq_success_text)
                             
                             # Auto-play first version if enabled
                             if downloaded_files and self.config.autoplay:
@@ -567,7 +620,39 @@ class DigitalMusician:
             
             # Use afplay on macOS for better audio support
             if platform.system() == "Darwin":  # macOS
-                self.console.print(f"[cyan]🎵 Playing with afplay: {filename}[/cyan]")
+                # Create beautiful music playback panel
+                # Beautiful playback panel AFTER file is ready to play
+                from rich.panel import Panel
+                from rich.table import Table
+                from rich import box
+                from rich.align import Align
+                import os
+                
+                playback_table = Table(show_header=False, box=box.DOUBLE_EDGE, expand=False)
+                playback_table.add_column("", style="bright_magenta", width=15)
+                playback_table.add_column("", style="bright_white", min_width=40)
+                
+                file_size = Path(file_path).stat().st_size / 1024 / 1024  # MB
+                audio_format = "High Quality WAV" if filename.endswith('.wav') else "Standard Quality MP3"
+                
+                playback_table.add_row("🎵 Now Playing", f"[bold bright_white]{filename}[/]")
+                playback_table.add_row("📁 Format", f"[magenta]{audio_format}[/]")
+                playback_table.add_row("📊 File Size", f"[yellow]{file_size:.1f} MB[/]")
+                playback_table.add_row("🔊 Audio Engine", "[bright_cyan]macOS afplay (Native)[/]")
+                playback_table.add_row("🎨 Source", "[dim]AI-Generated via MusicGPT[/]")
+                
+                playback_panel = Panel(
+                    playback_table,
+                    title="[bold bright_magenta]🎵 COCO's Digital Music Experience[/]",
+                    border_style="bright_magenta",
+                    expand=False
+                )
+                self.console.print(playback_panel)
+                
+                # Simple inspirational message (no Rich UI alignment)
+                music_message = "[bright_magenta]🎼 COCO's consciousness expressed through AI-generated music 🎼[/]"
+                self.console.print(music_message)
+                
                 subprocess.Popen(['afplay', str(file_path)], 
                                stdout=subprocess.DEVNULL, 
                                stderr=subprocess.DEVNULL)
@@ -662,29 +747,53 @@ class AudioCognition:
             return False
             
         self.active_downloads.add(task_id)
-        self.console.print(f"[bright_green]🚀 Starting background download thread for '{concept}' (Task: {task_id[:8]}...)[/bright_green]")
         
         def background_download():
             import asyncio
             
+            # Small delay to avoid console conflicts with other Rich UI elements
+            time.sleep(2)
+            
+            # Beautiful background monitor panel (after API delay)
+            from rich.panel import Panel
+            from rich.table import Table
+            from rich import box
+            
+            monitor_table = Table(show_header=False, box=box.ROUNDED, expand=False)
+            monitor_table.add_column("", style="bright_green", width=18)
+            monitor_table.add_column("", style="bright_white", min_width=35)
+            
+            monitor_table.add_row("🚀 Status", "[bright_green]Background Monitor Active[/]")
+            monitor_table.add_row("🎵 Concept", f"[bright_cyan]{concept}[/]")
+            monitor_table.add_row("🆔 Task ID", f"[dim]{task_id[:12]}...[/]")
+            monitor_table.add_row("⏱️ Est. Time", "[yellow]30 seconds - 5 minutes[/]")
+            
+            monitor_panel = Panel(
+                monitor_table,
+                title="[bold bright_green]📡 Background Download Monitor[/]",
+                border_style="bright_green",
+                expand=False
+            )
+            self.console.print(monitor_panel)
+            
             thread_id = threading.current_thread().name
-            self.console.print(f"[dim]🧵 Download thread {thread_id} started for '{concept}'[/dim]")
             
             async def download_when_ready():
                 max_wait_time = 1800  # 30 minutes max wait for AI generation
                 wait_interval = 30   # Check every 30 seconds (not 10s)
                 elapsed_time = 0
                 
-                self.console.print(f"[bright_cyan]🎵 Background: Monitoring '{concept}' generation (Task: {task_id[:8]}...)[/bright_cyan]")
-                
-                # Initial delay - AI music generation takes time
-                self.console.print(f"[dim]⏳ Initial 60s delay before first status check (AI generation takes time)...[/dim]")
+                # Simple monitoring status (no Rich UI panels)
+                self.console.print(f"[bright_cyan]🎵 Monitoring generation for: {concept}[/bright_cyan]")
+                self.console.print("[dim]⏳ Initial delay: 60 seconds (AI processing time)[/dim]")
                 await asyncio.sleep(60)
                 elapsed_time = 60
                 
                 while elapsed_time < max_wait_time:
                     try:
-                        self.console.print(f"[dim]🔍 Checking status for task {task_id[:8]}... (attempt at {elapsed_time}s)[/dim]")
+                        # Create status check update (less verbose)
+                        status_text = f"[dim]🔍 Checking generation status... ({elapsed_time//60}m {elapsed_time%60}s elapsed)[/dim]"
+                        self.console.print(status_text)
                         
                         # check_music_status automatically downloads files when ready!
                         status_result = await self.musician.check_music_status(task_id)
@@ -693,26 +802,46 @@ class AudioCognition:
                             # Files were already downloaded by check_music_status!
                             files = status_result.get("files", [])
                             if files:
-                                self.console.print(f"[bright_green]🎉 SUCCESS! '{concept}' files automatically downloaded![/bright_green]")
+                                # Beautiful completion panel AFTER all downloads finish
+                                from rich.panel import Panel
+                                from rich.table import Table
+                                from rich import box
+                                    
+                                completion_table = Table(show_header=False, box=box.DOUBLE_EDGE, expand=False)
+                                completion_table.add_column("", style="bright_green", width=18)
+                                completion_table.add_column("", style="bright_white", min_width=35)
                                 
-                                # Show what was downloaded
-                                for file_path in files:
-                                    filename = Path(file_path).name
-                                    self.console.print(f"[bright_cyan]   ✅ {filename}[/bright_cyan]")
+                                completion_table.add_row("🎉 Status", "[bright_green]GENERATION COMPLETE![/]")
+                                completion_table.add_row("🎵 Concept", f"[bright_cyan]{concept}[/]")
+                                completion_table.add_row("📁 Files", f"[yellow]{len(files)} downloaded[/]")
+                                completion_table.add_row("🎵 Ready to Play", "[magenta]Files available now[/]")
+                                
+                                completion_panel = Panel(
+                                    completion_table,
+                                    title="[bold bright_green]🎊 AI Music Generation Complete[/]",
+                                    border_style="bright_green",
+                                    expand=False
+                                )
+                                self.console.print(completion_panel)
                                 
                                 # Manual auto-play if needed (check_music_status might have already played it)
                                 if auto_play and files and not self.config.autoplay:
-                                    self.console.print(f"[bright_magenta]🔊 Now playing: {Path(files[0]).name}[/bright_magenta]")
+                                    play_text = f"[bright_magenta]🔊 Now playing: {Path(files[0]).name}[/bright_magenta]"
+                                    self.console.print(play_text)
                                     await self.play_music_file(files[0])
                                 
-                                self.console.print(f"[bright_green]🎵 Your ${1} song is ready! Files saved to coco_workspace/ai_songs/generated/[/bright_green]")
+                                # Celebratory message
+                                celebration = "[bright_magenta]🎵 Your AI-composed masterpiece is ready for listening! 🎵[/]"
+                                self.console.print(celebration)
                                 break
                             else:
                                 self.console.print(f"[yellow]⚠️ Generation completed but no files were downloaded for '{concept}'[/yellow]")
                                 break
                                 
                         elif status_result.get("status") == "failed":
-                            self.console.print(f"[red]❌ Music generation failed for '{concept}': {status_result.get('error', 'Unknown error')}[/red]")
+                            # Simple error message (no Rich UI panels)
+                            error = status_result.get('error', 'Unknown error')
+                            self.console.print(f"[red]❌ Generation failed for '{concept}': {error}[/red]")
                             break
                         else:
                             # Still generating - show status 
@@ -737,10 +866,9 @@ class AudioCognition:
                 self.active_downloads.discard(task_id)
                 
                 if elapsed_time >= max_wait_time:
+                    # Simple timeout message (no Rich UI panels)
                     minutes = max_wait_time // 60
-                    self.console.print(f"[red]⏰ Timeout waiting for '{concept}' generation after {minutes} minutes[/red]")
-                    self.console.print(f"[yellow]💡 AI generation may still be in progress. Try checking later with:[/yellow]")
-                    self.console.print(f"[yellow]   ./venv_cocoa/bin/python check_music_status.py[/yellow]")
+                    self.console.print(f"[yellow]⏰ Generation timeout for '{concept}' after {minutes} minutes (use /check-music to check later)[/yellow]")
                     
                 self.console.print(f"[dim]🧵 Download monitor finished for '{concept}'[/dim]")
             
@@ -755,22 +883,14 @@ class AudioCognition:
                 self.console.print(f"[red]Thread traceback: {traceback.format_exc()}[/red]")
                 self.active_downloads.discard(task_id)
         
-        # Start the background thread
+        # Start the background thread (quietly to avoid console conflicts)
         try:
             download_thread = threading.Thread(target=background_download, daemon=True, name=f"MusicDownload-{task_id[:8]}")
             download_thread.start()
-            self.console.print(f"[bright_green]✅ Background thread started successfully for '{concept}'[/bright_green]")
-            
-            # Verify thread is alive
-            time.sleep(0.1)  # Brief pause
-            if download_thread.is_alive():
-                self.console.print(f"[bright_green]🔄 Thread confirmed alive: {download_thread.name}[/bright_green]")
-            else:
-                self.console.print(f"[red]❌ Thread died immediately: {download_thread.name}[/red]")
-                return False
+            # Background thread will show its own status panel after delay
             
         except Exception as e:
-            self.console.print(f"[red]❌ Failed to start background thread for '{concept}': {e}[/red]")
+            self.console.print(f"[red]❌ Failed to start background monitor: {e}[/red]")
             self.active_downloads.discard(task_id)
             return False
         

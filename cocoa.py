@@ -1942,21 +1942,21 @@ class ToolSystem:
         
         # Enhance code with helpful imports and workspace setup
         from textwrap import dedent
-        enhanced_code = dedent(f'''
-            import sys
-            import os
-            from pathlib import Path
-            import json
-            import time
-            from datetime import datetime
+        enhanced_code = f"""
+import sys
+import os
+from pathlib import Path
+import json
+import time
+from datetime import datetime
 
-            # Set up workspace path
-            workspace = Path(r"{self.workspace}")
-            os.chdir(workspace)
+# Set up workspace path
+workspace = Path(r"{self.workspace}")
+os.chdir(str(workspace))
 
-            # Your code starts here:
-            {code}
-        ''').strip()
+# Your code starts here:
+{code}
+""".strip()
         
         code_file.write_text(enhanced_code)
         
@@ -2018,44 +2018,44 @@ class ToolSystem:
         code_file = python_workspace / f"animated_{int(time.time())}.py"
         
         # Create a version that captures frames instead of clearing screen
-        modified_code = f'''
-                            import sys
-                            import os
-                            from pathlib import Path
-                            import json
-                            import time
-                            from datetime import datetime
-                            import math
-                            import random
+        modified_code = f"""
+import sys
+import os
+from pathlib import Path
+import json
+import time
+from datetime import datetime
+import math
+import random
 
-                            # Set up workspace path
-                            workspace = Path(r"{self.workspace}")
-                            os.chdir(workspace)
+# Set up workspace path
+workspace = Path(r"{self.workspace}")
+os.chdir(str(workspace))
 
-                            # Capture output instead of clearing screen
-                            captured_frames = []
-                            original_print = print
+# Capture output instead of clearing screen
+captured_frames = []
+original_print = print
 
-                            def capture_print(*args, **kwargs):
-                                # Capture to string instead of stdout
-                                output = io.StringIO()
-                                original_print(*args, file=output, **kwargs)
-                                return output.getvalue()
+def capture_print(*args, **kwargs):
+    # Capture to string instead of stdout
+    output = io.StringIO()
+    original_print(*args, file=output, **kwargs)
+    return output.getvalue()
 
-                            # Import io for string capture
-                            import io
+# Import io for string capture
+import io
 
-                            # Override os.system to prevent screen clearing
-                            def no_clear(command):
-                                if command in ['clear', 'cls']:
-                                    return  # Do nothing
-                                return os.system(command)
+# Override os.system to prevent screen clearing
+def no_clear(command):
+    if command in ['clear', 'cls']:
+        return  # Do nothing
+    return os.system(command)
 
-                            os.system = no_clear
+os.system = no_clear
 
-                            # Modified code with frame capture
-                            {code}
-                        '''
+# Modified code with frame capture
+{code}
+"""
         
         # Replace the main execution to capture frames
         if 'def main():' in code and 'while True:' in code:
@@ -2291,56 +2291,134 @@ class ToolSystem:
             }
 
     def _format_execution_output(self, result: dict, analysis: dict) -> str:
-        """Format execution results with terminal-native ASCII art - no Rich UI dependencies"""
-        import textwrap
-        import shutil
+        """Format execution results with beautiful Rich UI panels matching music generation style"""
+        from rich.panel import Panel
+        from rich.table import Table
+        from rich.console import Console
+        from rich.align import Align
+        from rich.text import Text
+        from rich import box
+        import io
         
-        # Get actual terminal width for proper formatting
-        try:
-            terminal_width = shutil.get_terminal_size().columns
-        except:
-            terminal_width = 80  # Fallback
-            
-        # Set safe width that fits in most terminals (leave margin for scrollbars/borders)
-        safe_width = min(terminal_width - 4, 76)  # Leave 4 chars margin
-        box_width = safe_width - 2  # Account for box borders
+        # Create console buffer for Rich output
+        console_buffer = io.StringIO()
+        temp_console = Console(file=console_buffer, width=80, legacy_windows=False)
         
-        # Language-specific ASCII art and symbols
-        lang_art = {
-            "python": {
-                "icon": "🐍",
-                "name": "PYTHON",
-                "border": "=",
-                "color_code": "\033[94m",  # Blue
-                "art": "    /\\_/\\\n   ( ^.^ )\n    > ^ <"
-            },
-            "bash": {
-                "icon": "🐚", 
-                "name": "BASH",
-                "border": "-",
-                "color_code": "\033[92m",  # Green
-                "art": "   ___\n  |___|\n  |o o|\n   \\_/"
-            },
-            "sql": {
-                "icon": "🗃️",
-                "name": "SQL",
-                "border": "-",
-                "color_code": "\033[95m",  # Magenta
-                "art": "  [DB]\n ┌─────┐\n │ ••• │\n └─────┘"
-            },
-            "javascript": {
-                "icon": "🟨",
-                "name": "JAVASCRIPT", 
-                "border": "~",
-                "color_code": "\033[93m",  # Yellow
-                "art": "   { }\n  ( . )\n   \\_/"
-            }
+        # Language-specific styling
+        lang_styles = {
+            "python": {"color": "bright_blue", "icon": "🐍", "name": "Python"},
+            "bash": {"color": "bright_green", "icon": "🐚", "name": "Bash"},
+            "sql": {"color": "bright_magenta", "icon": "🗃️", "name": "SQL"},
+            "javascript": {"color": "bright_yellow", "icon": "🟨", "name": "JavaScript"}
         }
         
-        config = lang_art.get(result["language"], {
-            "icon": "💻", "name": result["language"].upper(), "border": "-",
-            "color_code": "\033[97m", "art": "  </>\n [   ]\n  \\_/"
+        config = lang_styles.get(result["language"], {
+            "color": "bright_white", "icon": "💻", "name": result["language"].title()
         })
+        
+        # Create execution results table
+        results_table = Table(show_header=False, box=box.ROUNDED, expand=False)
+        results_table.add_column("", style=config["color"], width=18)
+        results_table.add_column("", style="bright_white", min_width=35)
+        
+        # Add execution details
+        execution_time = result.get("execution_time", 0)
+        results_table.add_row(f"{config['icon']} Language", f"[{config['color']}]{config['name']}[/]")
+        results_table.add_row("⚡ Status", "[bright_green]Executed Successfully[/]" if result.get("success") else "[red]Execution Failed[/]")
+        results_table.add_row("⏱️ Time", f"[yellow]{execution_time:.3f} seconds[/]")
+        results_table.add_row("🧠 Complexity", f"[cyan]{analysis.get('complexity', 'unknown').title()}[/]")
+        
+        if result.get("return_code") is not None:
+            results_table.add_row("🔢 Exit Code", f"[dim]{result['return_code']}[/]")
+        
+        # Create main results panel
+        results_panel = Panel(
+            results_table,
+            title=f"[bold {config['color']}]{config['icon']} COCO's Computational Mind Results[/]",
+            border_style=config['color'],
+            expand=False
+        )
+        temp_console.print(results_panel)
+        
+        # Handle output display
+        if result.get("success", False):
+            stdout = result.get("stdout", "").strip()
+            stderr = result.get("stderr", "").strip()
+            
+            if stdout:
+                # Create output panel with proper formatting
+                output_lines = stdout.split('\n')
+                if len(output_lines) > 20:
+                    # Truncate very long outputs
+                    displayed_lines = output_lines[:15] + ["...", f"({len(output_lines)-15} more lines)"] + output_lines[-3:]
+                    output_content = '\n'.join(displayed_lines)
+                else:
+                    output_content = stdout
+                
+                output_panel = Panel(
+                    f"[bright_white]{output_content}[/bright_white]",
+                    title="[bold bright_green]📤 Program Output[/]",
+                    border_style="bright_green",
+                    expand=False
+                )
+                temp_console.print(output_panel)
+            
+            if stderr:
+                # Show warnings/stderr if present (even for successful executions)
+                stderr_panel = Panel(
+                    f"[yellow]{stderr}[/yellow]",
+                    title="[bold yellow]⚠️ Warnings & Info[/]",
+                    border_style="yellow",
+                    expand=False
+                )
+                temp_console.print(stderr_panel)
+            
+            # Success message
+            if not stdout and not stderr:
+                # Code executed but no output
+                success_text = "[bright_green]✅ Code executed successfully with no output[/]"
+                temp_console.print(Align.center(success_text))
+            else:
+                # Celebratory message for successful execution with output
+                celebration = f"[bright_green]🧠 COCO's computational mind processed your {config['name']} code! 🧠[/]"
+                temp_console.print(Align.center(celebration))
+        
+        else:
+            # Handle execution errors
+            error_content = result.get("stderr", "Unknown error").strip()
+            
+            # Create elegant error panel
+            error_table = Table(show_header=False, box=box.ROUNDED, expand=False)
+            error_table.add_column("", style="red", width=18)
+            error_table.add_column("", style="bright_white", min_width=35)
+            
+            error_table.add_row("❌ Status", "[red]Execution Failed[/]")
+            error_table.add_row("🔢 Exit Code", f"[dim]{result.get('return_code', 'N/A')}[/]")
+            error_table.add_row("⚠️ Error Type", "[yellow]Syntax/Runtime Error[/]")
+            error_table.add_row("💡 Suggestion", "[dim]Check code syntax and logic[/]")
+            
+            error_panel = Panel(
+                error_table,
+                title="[bold red]❌ Code Execution Error[/]",
+                border_style="red",
+                expand=False
+            )
+            temp_console.print(error_panel)
+            
+            # Show error details
+            if error_content:
+                error_detail_panel = Panel(
+                    f"[red]{error_content}[/red]",
+                    title="[bold red]🔍 Error Details[/]",
+                    border_style="red",
+                    expand=False
+                )
+                temp_console.print(error_detail_panel)
+        
+        # Return the beautiful rendered output
+        rendered_output = console_buffer.getvalue()
+        console_buffer.close()
+        return rendered_output
         
         # ANSI color codes for terminal
         RESET = "\033[0m"
@@ -2774,6 +2852,34 @@ class ToolSystem:
 """
         
         return result + "\n" + toolkit_info
+
+
+    def run_code_simple(self, code: str) -> str:
+        """Simple, reliable code execution fallback"""
+        import subprocess
+        import sys
+        
+        try:
+            # Direct execution - no modifications
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=str(self.workspace) if hasattr(self, 'workspace') else None
+            )
+            
+            if result.returncode == 0:
+                output = result.stdout.strip()
+                return f"✅ **Execution Successful**\n\n```\n{output}\n```"
+            else:
+                error = result.stderr.strip()
+                return f"❌ **Execution Failed**\n\n```\n{error}\n```"
+                
+        except subprocess.TimeoutExpired:
+            return "❌ **Execution Timeout** - Code took longer than 30 seconds"
+        except Exception as e:
+            return f"❌ **Execution Error**\n```\n{str(e)}\n```"
 
     def explore_directory(self, path: str = ".") -> str:
         """EXPLORE - Navigate through digital file systems"""
