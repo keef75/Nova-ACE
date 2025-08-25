@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field
 from collections import deque
+from textwrap import dedent
 
 # Rich UI components - COMPLETE ARSENAL for spectacular displays!
 from rich.console import Console
@@ -1940,20 +1941,21 @@ class ToolSystem:
         code_file = python_workspace / f"execution_{int(time.time())}.py"
         
         # Enhance code with helpful imports and workspace setup
-        enhanced_code = f'''import sys
-                        import os
-                        from pathlib import Path
-                        import json
-                        import time
-                        from datetime import datetime
+        enhanced_code = dedent(f'''
+            import sys
+            import os
+            from pathlib import Path
+            import json
+            import time
+            from datetime import datetime
 
-                        # Set up workspace path
-                        workspace = Path(r"{self.workspace}")
-                        os.chdir(workspace)
+            # Set up workspace path
+            workspace = Path(r"{self.workspace}")
+            os.chdir(workspace)
 
-                        # Your code starts here:
-                        {code}
-                        '''
+            # Your code starts here:
+            {code}
+        ''').strip()
         
         code_file.write_text(enhanced_code)
         
