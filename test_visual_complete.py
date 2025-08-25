@@ -21,7 +21,7 @@ from rich import print as rprint
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from cocoa_visual import VisualCognition, VisualConfig
+from cocoa_visual import VisualCortex, VisualConfig
 
 console = Console()
 
@@ -76,7 +76,7 @@ async def test_simple_generation():
     
     try:
         config = VisualConfig()
-        visual = VisualCognition(config, console)
+        visual = VisualCortex(config, console)
         
         prompt = "a minimalist logo with a circle and triangle"
         console.print(f"[cyan]Generating: {prompt}[/]")
@@ -108,7 +108,7 @@ async def test_multiple_styles():
     
     try:
         config = VisualConfig()
-        visual = VisualCognition(config, console)
+        visual = VisualCortex(config, console)
         
         results = []
         for style, prompt in styles:
@@ -187,7 +187,7 @@ async def test_ascii_display():
     
     try:
         config = VisualConfig()
-        visual = VisualCognition(config, console)
+        visual = VisualCortex(config, console)
         
         # Check if we have any existing images
         visuals_dir = Path("coco_workspace/visuals")
@@ -277,7 +277,7 @@ async def interactive_test():
     console.print("Type 'quit' to exit.\n")
     
     config = VisualConfig()
-    visual = VisualCognition(config, console)
+    visual = VisualCortex(config, console)
     
     while True:
         try:

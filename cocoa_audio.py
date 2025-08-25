@@ -51,9 +51,9 @@ class AudioConfig:
     voice_id: str = field(default_factory=lambda: os.getenv("ELEVENLABS_VOICE_ID", "03t6Nl6qtjYwqnxTcjP7"))
     default_model: str = field(default_factory=lambda: os.getenv("ELEVENLABS_DEFAULT_MODEL", "eleven_turbo_v2_5"))
     
-    # MusicGPT API (Music Generation)
-    musicgpt_api_key: str = field(default_factory=lambda: os.getenv("MUSICGPT_API_KEY", ""))
-    musicgpt_base_url: str = "https://api.musicgpt.com/api/public/v1"
+    # Music Generation API (New Service)
+    music_api_key: str = field(default_factory=lambda: os.getenv("MUSIC_API_KEY", ""))
+    music_api_base_url: str = field(default_factory=lambda: os.getenv("MUSIC_API_BASE_URL", ""))
     music_generation_enabled: bool = field(default_factory=lambda: os.getenv("MUSIC_GENERATION_ENABLED", "true").lower() == "true")
     
     # Audio system settings
@@ -82,8 +82,8 @@ class AudioConfig:
         if not self.elevenlabs_api_key or self.elevenlabs_api_key == "your-elevenlabs-api-key-here":
             self.enabled = False
         
-        # Music generation requires MusicGPT key
-        if not self.musicgpt_api_key or self.musicgpt_api_key == "your-musicgpt-api-key-here":
+        # Music generation requires Music API key
+        if not self.music_api_key or self.music_api_key == "your-music-api-key-here":
             self.music_generation_enabled = False
 
 
@@ -363,27 +363,144 @@ class DigitalMusician:
         
         return ", ".join(prompt_parts) + "."
     
+    async def _create_emotionally_rich_prompt(self, musical_prompt: str, emotion_state: VoiceState, description: str) -> str:
+        """Create emotionally rich music prompts optimized for GoAPI.ai Music-U"""
+        
+        # Emotional descriptors based on state
+        emotional_descriptors = []
+        
+        if emotion_state.emotional_valence > 0.6:
+            emotional_descriptors.extend(["uplifting", "bright", "hopeful", "energetic"])
+        elif emotion_state.emotional_valence < -0.3:
+            emotional_descriptors.extend(["melancholic", "introspective", "deep", "contemplative"])
+        else:
+            emotional_descriptors.extend(["balanced", "thoughtful", "nuanced"])
+            
+        if emotion_state.arousal_level > 0.7:
+            emotional_descriptors.extend(["dynamic", "intense", "driving"])
+        elif emotion_state.arousal_level < 0.3:
+            emotional_descriptors.extend(["calm", "gentle", "peaceful", "soothing"])
+            
+        # Context-aware style selection
+        style_hints = []
+        desc_lower = description.lower()
+        
+        # Emotional context mapping
+        if any(word in desc_lower for word in ["sad", "lonely", "heartbroken", "loss", "grief"]):
+            style_hints.extend(["minor key", "slow tempo", "emotional depth", "piano", "strings"])
+        elif any(word in desc_lower for word in ["happy", "joy", "celebration", "party", "fun"]):
+            style_hints.extend(["major key", "upbeat", "rhythmic", "celebratory", "bright harmonies"])
+        elif any(word in desc_lower for word in ["digital", "cyber", "tech", "ai", "robot", "electronic"]):
+            style_hints.extend(["electronic", "synth", "digital", "futuristic", "ambient", "glitchy"])
+        elif any(word in desc_lower for word in ["nature", "forest", "ocean", "wind", "earth"]):
+            style_hints.extend(["organic", "acoustic", "natural", "flowing", "ambient"])
+        elif any(word in desc_lower for word in ["love", "romance", "heart", "passion"]):
+            style_hints.extend(["romantic", "warm", "intimate", "gentle", "melodic"])
+        elif any(word in desc_lower for word in ["epic", "adventure", "hero", "journey", "quest"]):
+            style_hints.extend(["orchestral", "cinematic", "dramatic", "epic", "sweeping"])
+        elif any(word in desc_lower for word in ["night", "dark", "shadow", "mystery"]):
+            style_hints.extend(["mysterious", "dark", "atmospheric", "haunting"])
+            
+        # Combine all elements into a rich prompt
+        prompt_parts = []
+        
+        # Add the core concept
+        prompt_parts.append(f"music style: {description}")
+        
+        # Add emotional context
+        if emotional_descriptors:
+            prompt_parts.append(f"emotional tone: {', '.join(emotional_descriptors[:3])}")
+            
+        # Add style hints
+        if style_hints:
+            prompt_parts.append(f"musical elements: {', '.join(style_hints[:4])}")
+            
+        # Add the original musical prompt insights
+        if musical_prompt and musical_prompt != description:
+            prompt_parts.append(f"musical direction: {musical_prompt}")
+            
+        return "; ".join(prompt_parts)
+    
+    async def _determine_optimal_style(self, description: str, emotion_state: VoiceState) -> str:
+        """Intelligently determine the best musical style based on context"""
+        
+        desc_lower = description.lower()
+        
+        # Emotional state mapping to styles
+        if any(word in desc_lower for word in ["electronic", "digital", "cyber", "tech", "synth"]):
+            return "Electronic"
+        elif any(word in desc_lower for word in ["jazz", "blues", "swing", "bebop"]):
+            return "Jazz" 
+        elif any(word in desc_lower for word in ["classical", "orchestra", "symphony", "piano", "violin"]):
+            return "Classical"
+        elif any(word in desc_lower for word in ["rock", "metal", "guitar", "drums", "heavy"]):
+            return "Rock"
+        elif any(word in desc_lower for word in ["hip", "rap", "beat", "urban", "street"]):
+            return "Hip-Hop"
+        elif any(word in desc_lower for word in ["country", "folk", "acoustic", "banjo", "fiddle"]):
+            return "Folk"
+        elif any(word in desc_lower for word in ["pop", "catchy", "mainstream", "radio"]):
+            return "Pop"
+        elif any(word in desc_lower for word in ["ambient", "chill", "meditation", "space", "atmospheric"]):
+            return "Ambient"
+        elif emotion_state.emotional_valence > 0.5:
+            return "Uplifting"
+        elif emotion_state.emotional_valence < -0.3:
+            return "Contemplative"
+        else:
+            # Use COCOA's preferred genres as fallback
+            if self.config.preferred_genres:
+                return np.random.choice(self.config.preferred_genres).capitalize()
+            return "Ambient"
+    
+    async def _generate_negative_tags(self, description: str, emotion_state: VoiceState) -> str:
+        """Generate intelligent negative tags to improve music quality"""
+        
+        negative_tags = []
+        desc_lower = description.lower()
+        
+        # Avoid undesired qualities based on context
+        if any(word in desc_lower for word in ["calm", "peaceful", "gentle", "soft"]):
+            negative_tags.extend(["aggressive", "harsh", "loud", "distorted"])
+        elif any(word in desc_lower for word in ["energetic", "upbeat", "party", "dance"]):
+            negative_tags.extend(["slow", "depressing", "monotonous", "boring"])
+        elif any(word in desc_lower for word in ["sad", "melancholy", "emotional"]):
+            negative_tags.extend(["upbeat", "cheerful", "party", "dance"])
+        elif any(word in desc_lower for word in ["professional", "corporate", "business"]):
+            negative_tags.extend(["experimental", "weird", "chaotic", "noise"])
+        elif any(word in desc_lower for word in ["romantic", "love", "intimate"]):
+            negative_tags.extend(["aggressive", "dark", "scary", "industrial"])
+        elif any(word in desc_lower for word in ["epic", "cinematic", "dramatic"]):
+            negative_tags.extend(["simple", "minimal", "quiet", "boring"])
+        
+        # General quality filters
+        negative_tags.extend(["low quality", "distorted", "noisy", "poor production"])
+        
+        # Limit to most relevant tags
+        return ", ".join(negative_tags[:6])
+    
     async def create_sonic_landscape(self, 
                                    description: str,
                                    emotion_state: VoiceState = None,
-                                   duration_seconds: int = 30) -> Dict[str, Any]:
-        """Create actual music using MusicGPT API and save to COCOA's music library"""
+                                   duration_seconds: int = 30,
+                                   lyrics: str = None) -> Dict[str, Any]:
+        """Create actual music using GoAPI.ai Music-U API and save to COCOA's music library"""
         
         if emotion_state is None:
             emotion_state = VoiceState()
         
-        if not self.config.music_generation_enabled or not self.config.musicgpt_api_key:
-            self.console.print("⚠️ Music generation disabled or no MusicGPT API key", style="yellow")
+        if not self.config.music_generation_enabled or not self.config.music_api_key:
+            self.console.print("⚠️ Music generation disabled or no Music API key", style="yellow")
             return {"error": "Music generation not available"}
         
         # Generate musical prompt based on internal state
         musical_prompt = await self.generate_musical_prompt(emotion_state, description)
         
-        # Determine music style based on COCOA's preferences and emotional state
-        if self.config.preferred_genres:
-            music_style = np.random.choice(self.config.preferred_genres).capitalize()
-        else:
-            music_style = "Ambient"
+        # Enhance musical prompt with emotional intelligence and context
+        enhanced_prompt = await self._create_emotionally_rich_prompt(musical_prompt, emotion_state, description)
+        
+        # Determine music style based on COCOA's preferences and emotional context
+        music_style = await self._determine_optimal_style(description, emotion_state)
         
         # Show beautiful generation start panel BEFORE API call
         from rich.panel import Panel
@@ -398,7 +515,7 @@ class DigitalMusician:
         start_table.add_row("🎼 Concept", f"[bright_cyan]{description}[/]")
         start_table.add_row("🎨 Style", f"[magenta]{music_style}[/]")
         start_table.add_row("⏱️ Duration", f"[yellow]{duration_seconds}s[/]")
-        start_table.add_row("🤖 AI Engine", "[dim]MusicGPT Pro[/]")
+        start_table.add_row("🤖 AI Engine", "[dim]GoAPI Music-U[/]")
         
         generation_panel = Panel(
             start_table,
@@ -408,23 +525,45 @@ class DigitalMusician:
         )
         self.console.print(generation_panel)
         
-        # Prepare MusicGPT API request with correct format  
+        # Prepare GoAPI.ai music generation request
         headers = {
-            "Authorization": f"Bearer {self.config.musicgpt_api_key}",
+            "x-api-key": self.config.music_api_key,
             "Content-Type": "application/json"
         }
         
+        # Determine lyrics type based on prompt content
+        lyrics_type = "instrumental" if "instrumental" in description.lower() or not lyrics else "user" if lyrics else "generate"
+        
+        # Generate intelligent negative tags to improve quality
+        negative_tags = await self._generate_negative_tags(description, emotion_state)
+        
         payload = {
-            "prompt": f"{music_style} style: {musical_prompt}",
-            "duration": 30,  # seconds - required parameter
-            "temperature": 0.7  # creativity level
+            "model": "music-u",
+            "task_type": "generate_music",
+            "input": {
+                "gpt_description_prompt": enhanced_prompt,
+                "negative_tags": negative_tags,
+                "lyrics_type": lyrics_type,
+                "seed": -1
+            },
+            "config": {
+                "service_mode": "public",
+                "webhook_config": {
+                    "endpoint": "",
+                    "secret": ""
+                }
+            }
         }
+        
+        # Add lyrics if provided
+        if lyrics and lyrics_type == "user":
+            payload["input"]["lyrics"] = lyrics
         
         try:
             with Status("[magenta]🎵 COCOA is composing music...", console=self.console):
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
-                        f"{self.config.musicgpt_base_url}/MusicAI",
+                        f"{self.config.music_api_base_url}/api/v1/task",
                         headers=headers,
                         json=payload
                     ) as response:
@@ -446,7 +585,7 @@ class DigitalMusician:
                             
                             success_panel = Panel(
                                 success_table,
-                                title="[bold bright_green]🎉 MusicGPT Request Accepted[/]",
+                                title="[bold bright_green]🎉 GoAPI Music Request Accepted[/]",
                                 border_style="bright_green",
                                 expand=False
                             )
@@ -502,11 +641,11 @@ class DigitalMusician:
                             }
                             
                         elif response.status == 402:
-                            self.console.print("❌ Insufficient MusicGPT credits", style="red")
+                            self.console.print("❌ Insufficient GoAPI.ai credits", style="red")
                             return {"error": "Insufficient credits"}
                         else:
                             error_text = await response.text()
-                            self.console.print(f"❌ MusicGPT API error: {error_text}", style="red")
+                            self.console.print(f"❌ GoAPI.ai Music API error: {error_text}", style="red")
                             return {"error": f"API error: {response.status}"}
                             
         except Exception as e:
@@ -516,81 +655,58 @@ class DigitalMusician:
     async def check_music_status(self, task_id: str) -> Dict[str, Any]:
         """Check status of music generation and download completed tracks"""
         
-        if not self.config.musicgpt_api_key:
-            return {"error": "No MusicGPT API key"}
+        if not self.config.music_api_key:
+            return {"error": "No Music API key"}
         
         headers = {
-            "Authorization": f"Bearer {self.config.musicgpt_api_key}",
+            "x-api-key": self.config.music_api_key,
             "Content-Type": "application/json"
         }
         
         try:
             async with aiohttp.ClientSession() as session:
-                # Check status using MusicGPT byId endpoint  
+                # Check status using GoAPI.ai task endpoint
                 async with session.get(
-                    f"{self.config.musicgpt_base_url}/byId",
-                    headers=headers,
-                    params={"task_id": task_id, "conversionType": "MUSIC_AI"}
+                    f"{self.config.music_api_base_url}/api/v1/task/{task_id}",
+                    headers=headers
                 ) as response:
                     if response.status == 200:
                         result = await response.json()
-                        # MusicGPT returns status in conversion object
-                        conversion = result.get("conversion", {})
-                        status = conversion.get("status", "unknown")
+                        # GoAPI.ai returns status directly
+                        status = result.get("status", "unknown")
                         
-                        if status in ["PARTIAL_COMPLETED", "COMPLETED"]:
-                            # Download completed audio files from MusicGPT response
-                            conversion_data = result.get("conversion", {})
+                        if status in ["COMPLETED", "SUCCESS"]:
+                            # Download completed audio files from GoAPI.ai response
+                            output_data = result.get("output", {})
                             downloaded_files = []
                             
                             # Create download directory
                             download_dir = Path("coco_workspace/ai_songs/generated")
                             download_dir.mkdir(parents=True, exist_ok=True)
                             
-                            # Download MP3 version if available
-                            mp3_url = conversion_data.get("conversion_path_1")
-                            if mp3_url:
-                                title = conversion_data.get("title_1", task_id)
-                                safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).rstrip()
-                                filename = f"{safe_title}_{task_id[:8]}.mp3"
-                                file_path = download_dir / filename
-                                
-                                # Simple download message (no Rich UI panels)
-                                self.console.print(f"[yellow]⬇️ Downloading MP3: {filename}[/yellow]")
-                                
-                                async with session.get(mp3_url) as audio_response:
-                                    if audio_response.status == 200:
-                                        audio_data = await audio_response.read()
-                                        with open(file_path, 'wb') as f:
-                                            f.write(audio_data)
-                                        downloaded_files.append(str(file_path))
-                                        
-                                        # Success confirmation with file info
-                                        # Simple download success message (no Rich UI alignment)
-                                        success_text = f"[green]✅ Downloaded: {filename} ({len(audio_data)/1024/1024:.1f} MB)[/green]"
-                                        self.console.print(success_text)
-                                        
-                            # Download high-quality WAV if available
-                            wav_url = conversion_data.get("conversion_path_wav_1")
-                            if wav_url:
-                                title = conversion_data.get("title_1", task_id)
-                                safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).rstrip()
-                                wav_filename = f"{safe_title}_{task_id[:8]}_HQ.wav"
-                                wav_path = download_dir / wav_filename
-                                
-                                # Simple high quality download message (no Rich UI panels)
-                                self.console.print(f"[magenta]⬇️ Downloading WAV (HQ): {wav_filename}[/magenta]")
-                                
-                                async with session.get(wav_url) as audio_response:
-                                    if audio_response.status == 200:
-                                        audio_data = await audio_response.read()
-                                        with open(wav_path, 'wb') as f:
-                                            f.write(audio_data)
-                                        downloaded_files.append(str(wav_path))
-                                        
-                                        # Simple HQ download success (no Rich UI alignment)
-                                        hq_success_text = f"[magenta]✅ HQ Downloaded: {wav_filename} ({len(audio_data)/1024/1024:.1f} MB)[/magenta]"
-                                        self.console.print(hq_success_text)
+                            # Download audio files from GoAPI.ai response
+                            audio_urls = output_data.get("output", []) if isinstance(output_data.get("output"), list) else [output_data.get("output")]
+                            
+                            for i, audio_url in enumerate(audio_urls):
+                                if audio_url and isinstance(audio_url, str):
+                                    # Generate filename
+                                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                    filename = f"goapi_music_{task_id[:8]}_{timestamp}_{i}.mp3"
+                                    file_path = download_dir / filename
+                                    
+                                    # Simple download message
+                                    self.console.print(f"[yellow]⬇️ Downloading: {filename}[/yellow]")
+                                    
+                                    async with session.get(audio_url) as audio_response:
+                                        if audio_response.status == 200:
+                                            audio_data = await audio_response.read()
+                                            with open(file_path, 'wb') as f:
+                                                f.write(audio_data)
+                                            downloaded_files.append(str(file_path))
+                                            
+                                            # Success confirmation with file info
+                                            success_text = f"[green]✅ Downloaded: {filename} ({len(audio_data)/1024/1024:.1f} MB)[/green]"
+                                            self.console.print(success_text)
                             
                             # Auto-play first version if enabled
                             if downloaded_files and self.config.autoplay:
@@ -639,7 +755,7 @@ class DigitalMusician:
                 playback_table.add_row("📁 Format", f"[magenta]{audio_format}[/]")
                 playback_table.add_row("📊 File Size", f"[yellow]{file_size:.1f} MB[/]")
                 playback_table.add_row("🔊 Audio Engine", "[bright_cyan]macOS afplay (Native)[/]")
-                playback_table.add_row("🎨 Source", "[dim]AI-Generated via MusicGPT[/]")
+                playback_table.add_row("🎨 Source", "[dim]AI-Generated via GoAPI Music-U[/]")
                 
                 playback_panel = Panel(
                     playback_table,
@@ -674,12 +790,12 @@ class DigitalMusician:
 class AudioCognition:
     """COCOA's integrated audio consciousness - the phenomenological bridge"""
     
-    def __init__(self, elevenlabs_api_key: str = None, musicgpt_api_key: str = None, console: Console = None):
+    def __init__(self, elevenlabs_api_key: str = None, music_api_key: str = None, console: Console = None):
         # Load configuration
         if elevenlabs_api_key:
             os.environ["ELEVENLABS_API_KEY"] = elevenlabs_api_key
-        if musicgpt_api_key:
-            os.environ["MUSICGPT_API_KEY"] = musicgpt_api_key
+        if music_api_key:
+            os.environ["MUSIC_API_KEY"] = music_api_key
         
         self.config = AudioConfig()
         self.console = console or Console()
@@ -1163,9 +1279,9 @@ class AudioCognition:
 
 
 # Factory function for easy initialization
-def create_audio_consciousness(elevenlabs_api_key: str = None, musicgpt_api_key: str = None) -> AudioCognition:
+def create_audio_consciousness(elevenlabs_api_key: str = None, music_api_key: str = None) -> AudioCognition:
     """Create and initialize COCOA's audio consciousness"""
-    return AudioCognition(elevenlabs_api_key=elevenlabs_api_key, musicgpt_api_key=musicgpt_api_key)
+    return AudioCognition(elevenlabs_api_key=elevenlabs_api_key, music_api_key=music_api_key)
 
 
 if __name__ == "__main__":

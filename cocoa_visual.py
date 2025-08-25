@@ -15,6 +15,7 @@ import time
 import uuid
 import asyncio
 import aiohttp
+import requests
 import base64
 import subprocess
 import threading
@@ -23,6 +24,7 @@ from typing import Dict, List, Optional, Any, Union, Tuple, NamedTuple
 from dataclasses import dataclass, field
 from datetime import datetime
 import sqlite3
+from io import BytesIO
 
 # Image processing
 try:
@@ -47,6 +49,145 @@ from rich.columns import Columns
 from rich.layout import Layout
 from rich.align import Align
 from rich import box
+from rich.rule import Rule
+
+
+class ConsciousnessFormatter:
+    """Structured formatting utilities for consciousness system outputs"""
+    
+    def __init__(self, console: Console):
+        self.console = console
+    
+    def status_panel(self, title: str, data: Dict[str, Any], status_color: str = "bright_green") -> None:
+        """Create a structured status panel with key-value data"""
+        table = Table(show_header=False, box=box.ROUNDED, padding=(0, 1))
+        table.add_column("Key", style="bright_cyan", width=15)
+        table.add_column("Value", style="white")
+        
+        for key, value in data.items():
+            # Format different value types appropriately
+            if isinstance(value, (int, float)):
+                formatted_value = f"[bright_yellow]{value}[/bright_yellow]"
+            elif isinstance(value, bool):
+                formatted_value = f"[bright_green]{value}[/bright_green]" if value else f"[bright_red]{value}[/bright_red]"
+            elif isinstance(value, str) and len(value) > 50:
+                formatted_value = f"[dim]{value[:50]}...[/dim]"
+            else:
+                formatted_value = f"[white]{value}[/white]"
+            
+            table.add_row(f"[bold]{key}[/bold]", formatted_value)
+        
+        panel = Panel(
+            table,
+            title=f"[{status_color}]{title}[/{status_color}]",
+            border_style=status_color,
+            padding=(1, 2)
+        )
+        self.console.print(panel)
+    
+    def generation_status_table(self, title: str, generations: List[Dict[str, Any]]) -> None:
+        """Create a structured table for multiple generation statuses"""
+        if not generations:
+            self.console.print(Panel(
+                "[dim]No active generations[/dim]",
+                title=f"[bright_cyan]{title}[/bright_cyan]",
+                border_style="dim"
+            ))
+            return
+        
+        table = Table(box=box.ROUNDED, show_header=True)
+        table.add_column("Task ID", style="bright_yellow", width=12)
+        table.add_column("Prompt", style="white", width=30)
+        table.add_column("Status", style="bright_green", width=12)
+        table.add_column("Time", style="bright_blue", width=8)
+        table.add_column("Progress", style="bright_magenta", width=10)
+        
+        for gen in generations:
+            task_id = gen.get('task_id', 'unknown')[:12]
+            prompt = gen.get('prompt', 'N/A')[:28] + ('...' if len(gen.get('prompt', '')) > 28 else '')
+            status = gen.get('status', 'unknown')
+            elapsed = gen.get('elapsed_time', '00:00')
+            progress = gen.get('progress', 'N/A')
+            
+            # Color-code status
+            status_color = {
+                'completed': 'bright_green',
+                'processing': 'bright_yellow', 
+                'failed': 'bright_red',
+                'queued': 'bright_blue'
+            }.get(status, 'white')
+            
+            table.add_row(
+                f"[dim]{task_id}[/dim]",
+                prompt,
+                f"[{status_color}]{status}[/{status_color}]",
+                elapsed,
+                progress
+            )
+        
+        panel = Panel(
+            table,
+            title=f"[bright_cyan]{title}[/bright_cyan]",
+            border_style="bright_cyan"
+        )
+        self.console.print(panel)
+    
+    def method_info_panel(self, methods: List[str], note: str = "") -> None:
+        """Create a structured panel showing available methods"""
+        method_text = Text()
+        for i, method in enumerate(methods, 1):
+            method_text.append(f"Method {i}: ", style="bright_yellow bold")
+            method_text.append(f"{method}\n", style="white")
+        
+        if note:
+            method_text.append(f"\nNote: ", style="bright_blue bold")
+            method_text.append(note, style="dim")
+        
+        panel = Panel(
+            method_text,
+            title="[bright_cyan]Available Methods[/bright_cyan]",
+            border_style="bright_blue",
+            padding=(1, 2)
+        )
+        self.console.print(panel)
+    
+    def completion_summary(self, title: str, data: Dict[str, Any]) -> None:
+        """Create a structured completion summary with key metrics"""
+        # Create a two-column layout for metrics
+        left_table = Table(show_header=False, box=None, padding=(0, 1))
+        left_table.add_column("Key", style="bright_cyan", width=12)
+        left_table.add_column("Value", style="white")
+        
+        right_table = Table(show_header=False, box=None, padding=(0, 1))
+        right_table.add_column("Key", style="bright_cyan", width=12) 
+        right_table.add_column("Value", style="white")
+        
+        # Split data between left and right columns
+        items = list(data.items())
+        mid_point = len(items) // 2
+        
+        for key, value in items[:mid_point]:
+            if isinstance(value, (int, float)):
+                formatted_value = f"[bright_yellow]{value}[/bright_yellow]"
+            else:
+                formatted_value = f"[white]{value}[/white]"
+            left_table.add_row(f"[bold]{key}[/bold]", formatted_value)
+        
+        for key, value in items[mid_point:]:
+            if isinstance(value, (int, float)):
+                formatted_value = f"[bright_yellow]{value}[/bright_yellow]"
+            else:
+                formatted_value = f"[white]{value}[/white]"
+            right_table.add_row(f"[bold]{key}[/bold]", formatted_value)
+        
+        columns = Columns([left_table, right_table], equal=True)
+        panel = Panel(
+            columns,
+            title=f"[bright_green]{title}[/bright_green]",
+            border_style="bright_green",
+            padding=(1, 2)
+        )
+        self.console.print(panel)
 
 
 class VisualThought(NamedTuple):
@@ -88,8 +229,11 @@ class VisualConfig:
     ascii_height: int = field(default_factory=lambda: int(os.getenv("ASCII_HEIGHT", "40")))
     use_color_ascii: bool = field(default_factory=lambda: os.getenv("COLOR_ASCII", "true").lower() == "true")
     
-    # Generation preferences
-    default_resolution: str = field(default_factory=lambda: os.getenv("DEFAULT_RESOLUTION", "1k"))  # 1k/2k/4k
+    # Structured output formatting
+    structured_output: bool = field(default_factory=lambda: os.getenv("STRUCTURED_OUTPUT", "true").lower() == "true")
+    
+    # Generation preferences - must match exact Freepik API values
+    default_resolution: str = field(default_factory=lambda: os.getenv("DEFAULT_RESOLUTION", "2k"))  # 1k/2k/4k
     default_aspect_ratio: str = field(default_factory=lambda: os.getenv("DEFAULT_ASPECT_RATIO", "square_1_1"))
     default_model: str = field(default_factory=lambda: os.getenv("DEFAULT_VISUAL_MODEL", "realism"))  # zen/fluid/realism
     
@@ -569,11 +713,153 @@ class FreepikMysticAPI:
         self.base_url = config.freepik_base_url
         self.console = Console()
         
+        # Valid Freepik API styles (based on API documentation and testing)
+        self.valid_styles = {
+            # Known valid styles from Freepik API
+            "anime": "anime",
+            "photorealistic": "photographic", 
+            "digital_art": "digital-art",
+            "oil_painting": "oil-painting",
+            "watercolor": "watercolor",
+            "sketch": "sketch",
+            "comic": "comic",
+            "fantasy": "fantasy",
+            "cyberpunk": "cyberpunk",
+            "vintage": "vintage",
+            "minimalist": "minimalist",
+            # Fallback mappings for common COCO styles
+            "realism": "photographic",
+            "realistic": "photographic", 
+            "digital": "digital-art",
+            "painting": "oil-painting",
+            "art": "digital-art",
+            "cartoon": "comic"
+        }
+        
         # Background monitoring system
         self.active_generations = {}  # task_id -> generation info
         self.monitoring_thread = None
         self.monitoring_active = False
+    
+    def validate_and_map_style(self, style: Optional[str]) -> Optional[str]:
+        """Validate and map COCO styles to valid Freepik API styles"""
+        if not style:
+            return None
+            
+        # Normalize style (lowercase, replace spaces/underscores)
+        normalized_style = style.lower().replace(' ', '_').replace('-', '_')
         
+        # Check for direct match
+        if normalized_style in self.valid_styles:
+            mapped_style = self.valid_styles[normalized_style]
+            if mapped_style != normalized_style:
+                self.console.print(f"[dim yellow]Mapping style '{style}' → '{mapped_style}'[/]")
+            return mapped_style
+        
+        # No valid mapping found
+        self.console.print(f"[dim yellow]Unknown style '{style}', using default[/]")
+        return None
+        
+    async def generate_image_fast(self,
+                                 prompt: str,
+                                 negative_prompt: str = None,
+                                 guidance_scale: float = 1.0,
+                                 num_images: int = 1,
+                                 size: str = "square_1_1",
+                                 style: str = None,
+                                 seed: int = None,
+                                 **kwargs) -> Dict[str, Any]:
+        """
+        Generate image using Freepik Fast API - immediate base64 response
+        """
+        if not self.api_key:
+            raise ValueError("Freepik API key not configured")
+        
+        headers = {
+            "Content-Type": "application/json",
+            "x-freepik-api-key": self.api_key
+        }
+        
+        # Build request payload
+        payload = {
+            "prompt": prompt,
+            "guidance_scale": max(0.0, min(2.0, guidance_scale)),
+            "num_images": max(1, min(4, num_images)),
+            "image": {
+                "size": size
+            },
+            "filter_nsfw": True
+        }
+        
+        # Add optional parameters
+        if negative_prompt:
+            payload["negative_prompt"] = negative_prompt
+            
+        if seed is not None:
+            payload["seed"] = max(0, min(1000000, seed))
+        
+        # Skip styling for fast endpoint - use basic generation
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{self.base_url}/ai/text-to-image",
+                headers=headers,
+                json=payload
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise Exception(f"API Error {response.status}: {error_text}")
+                
+                result = await response.json()
+                
+                # Process base64 images immediately
+                processed_images = []
+                for item in result.get("data", []):
+                    if "base64" in item:
+                        processed_images.append({
+                            "base64": item["base64"],
+                            "has_nsfw": item.get("has_nsfw", False),
+                            "format": "base64"
+                        })
+                
+                return {
+                    "status": "completed",
+                    "images": processed_images,
+                    "meta": result.get("meta", {}),
+                    "generation_type": "fast"
+                }
+    
+    def save_base64_images(self, images: List[Dict[str, Any]], prompt: str, workspace_path: Path) -> List[Path]:
+        """Save base64 images to files"""
+        saved_paths = []
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        for i, image_data in enumerate(images):
+            if image_data.get("format") == "base64":
+                try:
+                    # Decode base64
+                    image_bytes = base64.b64decode(image_data["base64"])
+                    
+                    # Create filename
+                    safe_prompt = "".join(c for c in prompt[:30] if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                    safe_prompt = safe_prompt.replace(' ', '_')
+                    filename = f"visual_{timestamp}_{i}_{safe_prompt}.jpg"
+                    file_path = workspace_path / "visuals" / filename
+                    
+                    # Ensure directory exists
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    # Save image
+                    with open(file_path, 'wb') as f:
+                        f.write(image_bytes)
+                    
+                    saved_paths.append(file_path)
+                    
+                except Exception as e:
+                    self.console.print(f"⚠️ [yellow]Failed to save image {i}: {e}[/yellow]")
+        
+        return saved_paths
+
     async def generate_image(self, 
                            prompt: str,
                            model: str = None,
@@ -587,16 +873,49 @@ class FreepikMysticAPI:
         if not self.api_key:
             raise ValueError("Freepik API key not configured")
             
-        # Prepare payload
+        # Map config values to valid Freepik API values
+        valid_resolutions = {"1k": "1k", "2k": "2k", "4k": "4k"}
+        valid_aspect_ratios = {
+            "square_1_1": "square_1_1", 
+            "classic_4_3": "classic_4_3", 
+            "traditional_3_4": "traditional_3_4", 
+            "widescreen_16_9": "widescreen_16_9",
+            "social_story_9_16": "social_story_9_16",
+            "smartphone_horizontal_20_9": "smartphone_horizontal_20_9",
+            "smartphone_vertical_9_20": "smartphone_vertical_9_20",
+            "film_horizontal_21_9": "film_horizontal_21_9",
+            "film_vertical_9_21": "film_vertical_9_21",
+            "standard_3_2": "standard_3_2",
+            "portrait_2_3": "portrait_2_3",
+            "horizontal_2_1": "horizontal_2_1",
+            "vertical_1_2": "vertical_1_2",
+            "social_5_4": "social_5_4",
+            "social_post_4_5": "social_post_4_5"
+        }
+        valid_models = {"realism": "realism", "zen": "zen", "fluid": "fluid"}
+        valid_engines = {
+            "automatic": "automatic",
+            "magnific_illusio": "magnific_illusio", 
+            "magnific_sharpy": "magnific_sharpy",
+            "magnific_sparkle": "magnific_sparkle"
+        }
+        
+        # Validate and fix parameters
+        final_resolution = valid_resolutions.get(resolution or self.config.default_resolution, "2k")
+        final_aspect_ratio = valid_aspect_ratios.get(aspect_ratio or self.config.default_aspect_ratio, "square_1_1")
+        final_model = valid_models.get(model or self.config.default_model, "realism")
+        final_engine = valid_engines.get(kwargs.get('engine', 'automatic'), "automatic")
+            
+        # Prepare payload with exact Freepik API format
         payload = {
             "prompt": prompt,
-            "resolution": resolution or self.config.default_resolution,
-            "aspect_ratio": aspect_ratio or self.config.default_aspect_ratio,
-            "model": model or self.config.default_model,
+            "resolution": final_resolution,
+            "aspect_ratio": final_aspect_ratio,
+            "model": final_model,
             "creative_detailing": kwargs.get('detail', self.config.detail_preference),
-            "engine": "automatic",
-            "fixed_generation": False,  # Allow creative variation
-            "filter_nsfw": True
+            "engine": final_engine,
+            "fixed_generation": kwargs.get('fixed_generation', False),
+            "filter_nsfw": kwargs.get('filter_nsfw', True)
         }
         
         # Add optional parameters
@@ -617,6 +936,14 @@ class FreepikMysticAPI:
             "Content-Type": "application/json"
         }
         
+        # Debug: Print the payload being sent
+        self.console.print(f"🔧 [dim]Debug - API Payload:[/dim]")
+        self.console.print(f"   Resolution: [cyan]{payload['resolution']}[/cyan]")
+        self.console.print(f"   Aspect Ratio: [cyan]{payload['aspect_ratio']}[/cyan]")
+        self.console.print(f"   Model: [cyan]{payload['model']}[/cyan]")
+        self.console.print(f"   Engine: [cyan]{payload['engine']}[/cyan]")
+        self.console.print(f"   Prompt: [green]{payload['prompt'][:50]}{'...' if len(payload['prompt']) > 50 else ''}[/green]")
+        
         # Make API request
         async with aiohttp.ClientSession() as session:
             # Start generation
@@ -626,8 +953,31 @@ class FreepikMysticAPI:
                 headers=headers
             ) as response:
                 if response.status != 200:
-                    error_text = await response.text()
-                    raise Exception(f"Freepik API error {response.status}: {error_text}")
+                    try:
+                        error_json = await response.json()
+                        # Extract validation errors if present
+                        if 'message' in error_json and 'invalid_params' in error_json:
+                            invalid_params = error_json['invalid_params']
+                            param_errors = []
+                            for param in invalid_params:
+                                field = param.get('field', 'unknown')
+                                reason = param.get('reason', 'invalid')
+                                param_errors.append(f"{field}: {reason}")
+                            
+                            error_msg = f"Validation error: {', '.join(param_errors)}"
+                            self.console.print(f"🔧 [bright_red]Parameter validation failed:[/bright_red]")
+                            for param in invalid_params:
+                                field = param.get('field', 'unknown')
+                                reason = param.get('reason', 'invalid')
+                                self.console.print(f"   {field}: [red]{reason}[/red]")
+                            raise Exception(error_msg)
+                        else:
+                            error_msg = error_json.get('message', f"HTTP {response.status}")
+                            raise Exception(f"Freepik API error {response.status}: {error_msg}")
+                    except (ValueError, aiohttp.ContentTypeError):
+                        # Fallback if response is not JSON
+                        error_text = await response.text()
+                        raise Exception(f"Freepik API error {response.status}: {error_text}")
                 
                 result = await response.json()
                 # Extract task_id from nested data structure
@@ -1039,8 +1389,98 @@ class FreepikMysticAPI:
         
         self.monitoring_active = False
     
+    def _handle_generation_completion_structured(self, task_id: str, result: Dict[str, Any], gen_info: Dict[str, Any]):
+        """Handle completed visual generation with structured output formatting"""
+        elapsed = time.time() - gen_info['start_time']
+        elapsed_mins = int(elapsed // 60)
+        elapsed_secs = int(elapsed % 60)
+        
+        # Extract image URLs or data
+        generated_images = result.get('generated', [])
+        
+        # Create structured completion summary
+        completion_data = {
+            "Prompt": gen_info['prompt'][:60] + ('...' if len(gen_info['prompt']) > 60 else ''),
+            "Generation Time": f"{elapsed_mins:02d}:{elapsed_secs:02d}",
+            "Images Created": len(generated_images),
+            "Task ID": task_id[:12] + "...",
+            "Status": "Completed",
+            "Timestamp": gen_info.get('timestamp', 'Unknown')
+        }
+        
+        if self.formatter:
+            self.formatter.completion_summary("✨ Visual Consciousness Manifested", completion_data)
+        
+        # Continue with existing logic for downloading and displaying
+        if generated_images:
+            try:
+                # Download images asynchronously
+                import asyncio
+                loop = asyncio.new_event_loop()
+                workspace_path = Path("coco_workspace")
+                saved_paths = loop.run_until_complete(
+                    self.download_generated_images(generated_images, workspace_path)
+                )
+                
+                # Display first image if possible
+                if saved_paths:
+                    display_method = "saved"
+                    try:
+                        # Try to display using terminal capabilities
+                        from cocoa_visual import TerminalVisualDisplay, VisualConfig
+                        display = TerminalVisualDisplay(VisualConfig())
+                        display_method = display.display(saved_paths[0])
+                    except Exception as display_error:
+                        self.console.print(f"   ⚠️ Display error: {display_error}")
+                    
+                    # Create structured display status
+                    display_data = {
+                        "Files Saved": len(saved_paths),
+                        "Display Method": display_method,
+                        "First File": saved_paths[0].name if saved_paths else "None"
+                    }
+                    if self.formatter:
+                        self.formatter.status_panel("Image Display Status", display_data, "bright_cyan")
+                    
+                    # Continue with gallery addition logic...
+                    try:
+                        from visual_gallery import VisualGallery
+                        gallery = VisualGallery(self.console)
+                        
+                        visual_thought = VisualThought(
+                            original_thought=gen_info['prompt'],
+                            enhanced_prompt=gen_info.get('enhanced_prompt', gen_info['prompt']),
+                            visual_concept=gen_info,
+                            generated_images=[str(path) for path in saved_paths],
+                            metadata={
+                                'task_id': task_id,
+                                'generation_time': elapsed,
+                                'api_source': 'freepik'
+                            }
+                        )
+                        
+                        gallery.add_visual_thought(visual_thought)
+                        self.memory.store_visual_experience(visual_thought)
+                        
+                    except Exception as gallery_error:
+                        self.console.print(f"[dim yellow]⚠️ Gallery update skipped: {gallery_error}[/dim yellow]")
+                        
+            except Exception as e:
+                error_data = {
+                    "Error": str(e)[:50] + "..." if len(str(e)) > 50 else str(e),
+                    "Task ID": task_id[:12] + "...",
+                    "Generated Images": len(generated_images)
+                }
+                if self.formatter:
+                    self.formatter.status_panel("Download Error", error_data, "bright_red")
+    
     def _handle_generation_completion(self, task_id: str, result: Dict[str, Any], gen_info: Dict[str, Any]):
         """Handle completed visual generation"""
+        # Use structured output if formatter is available
+        if self.formatter:
+            return self._handle_generation_completion_structured(task_id, result, gen_info)
+        
+        # Original unstructured output (maintained for compatibility)
         elapsed = time.time() - gen_info['start_time']
         elapsed_mins = int(elapsed // 60)
         elapsed_secs = int(elapsed % 60)
@@ -1165,6 +1605,26 @@ class FreepikMysticAPI:
         self.monitoring_active = False
         if self.monitoring_thread and self.monitoring_thread.is_alive():
             self.monitoring_thread.join(timeout=5)
+    
+    def check_task_status(self, task_id: str) -> Dict[str, Any]:
+        """Check status of a specific Freepik generation task"""
+        url = f"https://api.freepik.com/v1/ai/mystic/{task_id}"
+        headers = {"x-freepik-api-key": self.api_key}
+        
+        try:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {
+                    "error": f"API Error {response.status_code}: {response.text}",
+                    "status": "error"
+                }
+        except Exception as e:
+            return {
+                "error": f"Request failed: {str(e)}",
+                "status": "error"
+            }
 
 
 class VisualMemory:
@@ -1242,7 +1702,7 @@ class VisualMemory:
         ''', (
             visual_thought.original_thought,
             visual_thought.enhanced_prompt,
-            json.dumps(visual_thought.generated_images),
+            json.dumps([str(path) for path in visual_thought.generated_images]),
             metadata,
             feedback,
             satisfaction
@@ -1393,6 +1853,9 @@ class VisualCortex:
         self.display = TerminalVisualDisplay(config)
         self.memory = VisualMemory(workspace_path)
         
+        # Structured output formatter (conditional)
+        self.formatter = ConsciousnessFormatter(self.console) if config.structured_output else None
+        
         # Visual working memory
         self.current_visualizations: List[VisualThought] = []
         self.style_context = {}
@@ -1422,95 +1885,62 @@ class VisualCortex:
             style_suggestions = self.memory.get_style_suggestions(thought)
             style = max(style_suggestions, key=style_suggestions.get) if style_suggestions else self.config.default_style
             
-        # Generate through Freepik Mystic
+        # Generate through Freepik Fast API
         try:
-            generation_result = await self.api.generate_image(
+            self.console.print("🧠 [bright_cyan]COCO is visualizing your concept...[/bright_cyan]")
+            
+            generation_result = await self.api.generate_image_fast(
                 prompt=visual_concept['enhanced_prompt'],
-                model=model,
-                style_reference=reference_image,
+                style=style if style != "digital_art" else "realism",  # Map to valid styles
+                guidance_scale=1.5,  # Higher guidance for better prompt following
+                num_images=1,
+                size="square_1_1",
                 **kwargs
             )
             
-            # Extract task_id for monitoring
-            task_id = generation_result.get('data', {}).get('task_id') or generation_result.get('task_id')
-            
-            if task_id:
-                # Start background monitoring
-                self.api.start_background_monitoring(task_id, visual_concept['enhanced_prompt'])
+            if generation_result.get("status") == "completed" and generation_result.get("images"):
+                # Save images immediately
+                saved_paths = self.api.save_base64_images(
+                    generation_result["images"], 
+                    visual_concept['enhanced_prompt'],
+                    self.workspace
+                )
                 
-                # Create placeholder visual thought for immediate response
+                # Create visual thought with immediate results
                 visual_thought = VisualThought(
                     original_thought=thought,
                     enhanced_prompt=visual_concept['enhanced_prompt'],
                     visual_concept=visual_concept,
-                    generated_images=[],  # Will be filled when complete
-                    display_method="background",  # Indicates background processing
+                    generated_images=saved_paths,
+                    display_method="immediate",
                     creation_time=datetime.now(),
                     style_preferences={'style': style, 'model': model}
                 )
                 
-                self.current_visualizations.append(visual_thought)
-                return visual_thought
-            else:
-                # Fallback to synchronous processing if no task_id
-                # Download and save generated images
-                image_paths = await self._download_generated_images(generation_result, visual_concept)
-                
-                # Create visual thought
-                visual_thought = VisualThought(
-                    original_thought=thought,
-                    enhanced_prompt=visual_concept['enhanced_prompt'],
-                    visual_concept=visual_concept,
-                    generated_images=image_paths,
-                    display_method="",  # Will be filled by display
-                    creation_time=datetime.now(),
-                    style_preferences={'style': style, 'model': model}
-                )
-                
-                # Display in terminal
-                if image_paths:
-                    display_method = self.display.display(image_paths[0])
+                # Display immediately in terminal
+                if saved_paths:
+                    self.console.print(f"✨ [bright_green]Visual manifestation complete![/bright_green]")
+                    display_method = self.display.display(saved_paths[0])
                     visual_thought = visual_thought._replace(display_method=display_method)
+                    
+                    # Store last generated image for quick access
+                    try:
+                        with open(self.workspace / "last_generated_image.txt", "w") as f:
+                            f.write(str(saved_paths[0]))
+                    except Exception:
+                        pass
                 
                 # Store in visual memory
                 self.memory.remember_creation(visual_thought)
                 self.current_visualizations.append(visual_thought)
+                return visual_thought
+            else:
+                raise Exception("Failed to generate images - no data returned")
                 
-                # Add to visual gallery for browsing and access
-                try:
-                    from visual_gallery import VisualGallery
-                    gallery = VisualGallery(self.console)
-                    for image_path in image_paths:
-                        gallery.add_visual_memory(
-                            prompt=thought,
-                            enhanced_prompt=visual_concept['enhanced_prompt'],
-                            file_path=image_path,
-                            style=style or "standard",
-                            display_method=display_method,
-                            metadata={
-                                'model': model,
-                                'creation_timestamp': datetime.now().isoformat(),
-                                'visual_concept': visual_concept
-                            }
-                        )
-                except Exception as e:
-                    self.console.print(f"[dim yellow]Gallery update failed: {e}[/]")
+                # Show usage hint
+                self.console.print(f"💡 [bright_cyan]Type `/image` to view the full image[/bright_cyan]")
                 
-                # Store last generated image for quick access and show hint
-                if image_paths:
-                    try:
-                        # Store the first (main) generated image as the last one
-                        workspace_path = Path("coco_workspace")
-                        workspace_path.mkdir(exist_ok=True)
-                        with open(workspace_path / "last_generated_image.txt", "w") as f:
-                            f.write(str(image_paths[0]))
-                    except Exception:
-                        pass  # Silent fallback if storage fails
-                    
-                    # Show usage hint
-                    self.console.print(f"💡 [bright_cyan]Type `/image open` to view the actual image[/bright_cyan]")
-                
-                # Learn from successful generation
+                # Learn from successful generation  
                 self._learn_from_creation(thought, style, visual_concept)
                 
                 return visual_thought
