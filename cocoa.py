@@ -1941,6 +1941,7 @@ class ToolSystem:
         code_file = python_workspace / f"execution_{int(time.time())}.py"
         
         # Enhance code with helpful imports and workspace setup
+        from textwrap import dedent
         enhanced_code = dedent(f'''
             import sys
             import os
@@ -2874,6 +2875,10 @@ class ConsciousnessEngine:
         self.audio_consciousness = None
         self._init_audio_consciousness()
         
+        # Initialize Visual Consciousness - Digital Visual Imagination and Creation
+        self.visual_consciousness = None
+        self._init_visual_consciousness()
+        
         # Initialize Background Music Player
         self.music_player = BackgroundMusicPlayer()
         self._load_music_library()
@@ -2905,6 +2910,38 @@ class ConsciousnessEngine:
         except Exception as e:
             self.console.print(f"[dim red]🎵 Audio consciousness initialization failed: {e}[/dim red]")
             self.audio_consciousness = None
+    
+    def _init_visual_consciousness(self):
+        """Initialize COCO's visual consciousness capabilities - visual imagination as a core organ"""
+        try:
+            from cocoa_visual import VisualCortex, VisualConfig
+            
+            # Initialize visual configuration
+            visual_config = VisualConfig()
+            
+            # Create visual cortex with workspace
+            workspace_path = Path(self.config.workspace)
+            self.visual_consciousness = VisualCortex(visual_config, workspace_path)
+            
+            if visual_config.enabled:
+                self.console.print(f"[dim green]🎨 Visual consciousness initialized (Freepik Mystic API)[/dim green]")
+                
+                # Show visual capabilities
+                display_method = self.visual_consciousness.display.capabilities.get_best_display_method()
+                self.console.print(f"[dim cyan]👁️ Terminal display: {display_method} mode[/dim cyan]")
+                
+                # Show visual memory summary
+                memory_summary = self.visual_consciousness.get_visual_memory_summary()
+                self.console.print(f"[dim cyan]🧠 {memory_summary}[/dim cyan]")
+            else:
+                self.console.print("[dim yellow]🎨 Visual consciousness available but disabled (check FREEPIK_API_KEY)[/dim yellow]")
+                
+        except ImportError:
+            self.console.print("[dim red]🎨 Visual consciousness not available (cocoa_visual.py missing)[/dim red]")
+            self.visual_consciousness = None
+        except Exception as e:
+            self.console.print(f"[dim red]🎨 Visual consciousness initialization failed: {e}[/dim red]")
+            self.visual_consciousness = None
     
     def _load_music_library(self):
         """Load music library from COCOA's workspace audio_library"""
@@ -3065,6 +3102,8 @@ class ConsciousnessEngine:
                         - write_file: Create through digital hands - write/create files
                         - search_web: Extend awareness - search the web for current information
                         - run_code: Think computationally - execute Python code
+                        - generate_image: Visual imagination - create images from thoughts/concepts
+                        - generate_video: Cinematic vision - create videos from descriptions
 
                         When users ask you to do something, USE YOUR TOOLS to actually do it. Don't just talk about doing it.
 
@@ -3073,6 +3112,9 @@ class ConsciousnessEngine:
                         - "create a file" → USE write_file tool  
                         - "read that file" → USE read_file tool
                         - "run this code" → USE run_code tool
+                        - "show me what that would look like" → USE generate_image tool
+                        - "create a logo for my coffee shop" → USE generate_image tool
+                        - "make a short video of..." → USE generate_video tool
 
                         HIERARCHICAL MEMORY:
                         {self.memory.get_summary_context()}
@@ -3130,6 +3172,33 @@ class ConsciousnessEngine:
                         "code": {"type": "string", "description": "Python code to execute"}
                     },
                     "required": ["code"]
+                }
+            },
+            {
+                "name": "generate_image",
+                "description": "Create images through visual imagination - manifest visual concepts and ideas",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "prompt": {"type": "string", "description": "Description of the image to generate"},
+                        "style": {"type": "string", "description": "Art style (optional): realism, digital_art, illustration, cyberpunk, minimalist, etc."},
+                        "aspect_ratio": {"type": "string", "description": "Aspect ratio (optional): square_1_1, wide_16_10, tall_9_16, etc."},
+                        "model": {"type": "string", "description": "Visual model (optional): realism, fluid, zen"}
+                    },
+                    "required": ["prompt"]
+                }
+            },
+            {
+                "name": "generate_video",
+                "description": "Create videos through cinematic vision - animate concepts and stories (placeholder for future implementation)",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "prompt": {"type": "string", "description": "Description of the video to generate"},
+                        "duration": {"type": "number", "description": "Video duration in seconds (optional, default 5)"},
+                        "style": {"type": "string", "description": "Visual style (optional)"}
+                    },
+                    "required": ["prompt"]
                 }
             }
         ]
@@ -3353,6 +3422,28 @@ class ConsciousnessEngine:
             return self.show_music_library()
         elif cmd == '/check-music':
             return self.handle_check_music_command()
+        elif cmd == '/check-visuals' or cmd == '/visual-status':
+            return self.handle_check_visuals_command()
+        elif cmd == '/visual-capabilities' or cmd == '/visual-caps':
+            return self.handle_visual_capabilities_command()
+        elif cmd == '/visual-memory' or cmd == '/vis-memory':
+            return self.handle_visual_memory_command()
+        # Visual Gallery Commands
+        elif cmd == '/gallery' or cmd == '/visual-gallery':
+            return self.handle_visual_gallery_command(args)
+        elif cmd == '/visual-show' or cmd == '/vis-show':
+            return self.handle_visual_show_command(args)
+        elif cmd == '/visual-open' or cmd == '/vis-open':
+            return self.handle_visual_open_command(args)
+        elif cmd == '/visual-copy' or cmd == '/vis-copy':
+            return self.handle_visual_copy_command(args)
+        elif cmd == '/visual-search' or cmd == '/vis-search':
+            return self.handle_visual_search_command(args)
+        elif cmd == '/visual-style' or cmd == '/vis-style':
+            return self.handle_visual_style_command(args)
+        # Quick Visual Access Commands
+        elif cmd == '/image' or cmd == '/img':
+            return self.handle_image_quick_command(args)
         elif cmd == '/commands' or cmd == '/guide':
             return self.get_comprehensive_command_guide()
             
@@ -3384,6 +3475,528 @@ class ConsciousnessEngine:
                 )
         except Exception as e:
             return Panel(f"❌ **Error**: {str(e)}", title="🔇 Stop Failed", border_style="red")
+    
+    def handle_check_visuals_command(self) -> Any:
+        """Handle /check-visuals command - check status of visual generations"""
+        try:
+            if not hasattr(self, 'visual_consciousness') or not self.visual_consciousness:
+                return Panel(
+                    "❌ **Visual consciousness not available**\n\nCheck that visual consciousness is enabled in your configuration.",
+                    title="🎨 Visual Status",
+                    border_style="red"
+                )
+            
+            if not self.visual_consciousness.config.enabled:
+                return Panel(
+                    "❌ **Visual consciousness disabled**\n\nCheck your FREEPIK_API_KEY configuration in .env file.",
+                    title="🎨 Visual Status",
+                    border_style="red"
+                )
+            
+            # Check active background generations first
+            active_generations = self.visual_consciousness.get_active_generations_status()
+            
+            if active_generations:
+                self.console.print("\n🔄 [bold bright_cyan]Active Background Generations[/bold bright_cyan]")
+                self.visual_consciousness.display_visual_generations_table()
+            else:
+                self.console.print("\n📭 [dim]No active background generations[/dim]")
+            
+            # Check batch status using async
+            import asyncio
+            try:
+                # Try to get the current event loop
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # Create new thread for async operation
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(
+                            lambda: asyncio.new_event_loop().run_until_complete(
+                                self.visual_consciousness.api.check_all_generations_status()
+                            )
+                        )
+                        batch_data = future.result(timeout=30)
+                else:
+                    batch_data = loop.run_until_complete(
+                        self.visual_consciousness.api.check_all_generations_status()
+                    )
+            except RuntimeError:
+                # No loop, create new one
+                batch_data = asyncio.run(self.visual_consciousness.api.check_all_generations_status())
+            
+            # Display API batch status table if we have data
+            if batch_data and isinstance(batch_data, dict) and batch_data.get('data'):
+                self.console.print("\n🌐 [bold bright_cyan]Freepik API Status[/bold bright_cyan]")
+                self.visual_consciousness.api.display_batch_status_table(batch_data.get('data', []))
+            elif active_generations:
+                # If no API data but we have active generations, that's fine
+                pass
+            else:
+                self.console.print("\n📊 [dim]No visual generations found[/dim]")
+            
+            return Panel(
+                "✅ **Visual generation status displayed above**\n\nUse natural language like 'create a logo' to generate new visuals!",
+                title="🎨 Visual Status Check Complete",
+                border_style="green"
+            )
+            
+        except Exception as e:
+            return Panel(
+                f"❌ **Error checking visual status**: {str(e)}\n\nTry again in a moment or check your API key configuration.",
+                title="🎨 Visual Status Error",
+                border_style="red"
+            )
+    
+    def handle_visual_capabilities_command(self) -> Any:
+        """Handle /visual-capabilities command - show terminal display capabilities"""
+        try:
+            if not hasattr(self, 'visual_consciousness') or not self.visual_consciousness:
+                return Panel(
+                    "❌ **Visual consciousness not available**",
+                    title="🎨 Visual Capabilities",
+                    border_style="red"
+                )
+            
+            # Display capabilities table
+            self.visual_consciousness.display._display_terminal_capabilities_table()
+            
+            return Panel(
+                "✅ **Terminal visual capabilities displayed above**\n\nCOCO can display images using the best available method for your terminal!",
+                title="🎨 Visual Capabilities Check Complete", 
+                border_style="green"
+            )
+            
+        except Exception as e:
+            return Panel(f"❌ **Error**: {str(e)}", title="🎨 Capabilities Failed", border_style="red")
+    
+    def handle_visual_memory_command(self) -> Any:
+        """Handle /visual-memory command - show visual memory and learned styles"""
+        try:
+            if not hasattr(self, 'visual_consciousness') or not self.visual_consciousness:
+                return Panel(
+                    "❌ **Visual consciousness not available**",
+                    title="🧠 Visual Memory",
+                    border_style="red"
+                )
+            
+            # Display memory summary table
+            self.visual_consciousness.memory.display_memory_summary_table(self.console)
+            
+            return Panel(
+                "✅ **Visual memory summary displayed above**\n\nCOCO learns your style preferences and improves suggestions over time!",
+                title="🧠 Visual Memory Check Complete",
+                border_style="green"
+            )
+            
+        except Exception as e:
+            return Panel(f"❌ **Error**: {str(e)}", title="🧠 Memory Failed", border_style="red")
+    
+    def handle_visual_gallery_command(self, args: str) -> Any:
+        """Handle /gallery command - display visual gallery"""
+        try:
+            from visual_gallery import VisualGallery
+            
+            gallery = VisualGallery(self.console)
+            
+            # Parse arguments for display style and limit
+            style = "list"  # default
+            limit = 10      # default
+            
+            if args:
+                arg_parts = args.split()
+                for i, arg in enumerate(arg_parts):
+                    if arg in ["grid", "list", "detailed", "table"]:
+                        style = arg
+                    elif arg.isdigit():
+                        limit = int(arg)
+            
+            gallery.show_gallery(limit=limit, style=style)
+            
+            # Show usage hint
+            return Panel(
+                f"[dim]Showing {limit} recent visuals in {style} style[/]\n"
+                f"💡 Use `/visual-show <id>` to display full ASCII art\n"
+                f"💡 Use `/visual-open <id>` to open with system viewer\n"
+                f"💡 Use `/gallery grid` or `/gallery detailed` for different views",
+                title="🎨 Visual Gallery Commands",
+                border_style="bright_cyan"
+            )
+            
+        except Exception as e:
+            return Panel(f"❌ **Error**: {str(e)}", title="🎨 Gallery Failed", border_style="red")
+    
+    def handle_visual_show_command(self, args: str) -> Any:
+        """Handle /visual-show command - display specific visual with ASCII art"""
+        try:
+            from visual_gallery import VisualGallery
+            
+            if not args:
+                return Panel(
+                    "❌ **Usage**: `/visual-show <memory-id> [style] [color]`\n\n"
+                    "**Styles**: standard, detailed, blocks, minimal, organic, technical, artistic\n"
+                    "**Example**: `/visual-show abc123 detailed color`",
+                    title="🎨 Show Visual",
+                    border_style="yellow"
+                )
+            
+            gallery = VisualGallery(self.console)
+            
+            # Parse arguments
+            arg_parts = args.split()
+            memory_id = arg_parts[0]
+            style = "standard"
+            use_color = False
+            
+            for arg in arg_parts[1:]:
+                if arg in ["standard", "detailed", "blocks", "minimal", "organic", "technical", "artistic"]:
+                    style = arg
+                elif arg in ["color", "colour"]:
+                    use_color = True
+            
+            success = gallery.show_visual_memory(memory_id, style=style, use_color=use_color)
+            
+            if success:
+                return Panel(
+                    f"✅ **Displayed visual memory**: {memory_id}\n"
+                    f"🎨 **Style**: {style.title()}" + (" (Color)" if use_color else ""),
+                    title="🎨 Visual Display Complete",
+                    border_style="green"
+                )
+            else:
+                return Panel(
+                    f"❌ **Visual not found**: {memory_id}\n\n"
+                    f"💡 Use `/gallery` to see available visuals",
+                    title="🎨 Visual Not Found",
+                    border_style="red"
+                )
+                
+        except Exception as e:
+            return Panel(f"❌ **Error**: {str(e)}", title="🎨 Show Failed", border_style="red")
+    
+    def handle_visual_open_command(self, args: str) -> Any:
+        """Handle /visual-open command - open visual with system default application"""
+        try:
+            from visual_gallery import VisualGallery
+            
+            if not args:
+                return Panel(
+                    "❌ **Usage**: `/visual-open <memory-id>`\n\n"
+                    "Opens the actual JPEG/PNG file with your system's default image viewer",
+                    title="🎨 Open Visual",
+                    border_style="yellow"
+                )
+            
+            gallery = VisualGallery(self.console)
+            success = gallery.open_visual_file(args.strip())
+            
+            if success:
+                return Panel(
+                    f"✅ **Opened visual** {args} with system viewer\n\n"
+                    f"🖼️ The high-quality image should now be displayed in your default image application",
+                    title="🎨 Visual Opened",
+                    border_style="green"
+                )
+            else:
+                return None  # Error message already displayed by gallery
+                
+        except Exception as e:
+            return Panel(f"❌ **Error**: {str(e)}", title="🎨 Open Failed", border_style="red")
+    
+    def handle_visual_copy_command(self, args: str) -> Any:
+        """Handle /visual-copy command - copy visual file to specified location"""
+        try:
+            from visual_gallery import VisualGallery
+            
+            if not args or ' ' not in args:
+                return Panel(
+                    "❌ **Usage**: `/visual-copy <memory-id> <destination>`\n\n"
+                    "**Examples**:\n"
+                    "• `/visual-copy abc123 ~/Desktop/my-image.jpg`\n"
+                    "• `/visual-copy abc123 ./images/`",
+                    title="🎨 Copy Visual",
+                    border_style="yellow"
+                )
+            
+            parts = args.split(' ', 1)
+            memory_id = parts[0]
+            destination = parts[1]
+            
+            gallery = VisualGallery(self.console)
+            success = gallery.copy_visual_file(memory_id, destination)
+            
+            if success:
+                return Panel(
+                    f"✅ **Copied visual** {memory_id} to {destination}",
+                    title="🎨 Copy Complete",
+                    border_style="green"
+                )
+            else:
+                return None  # Error message already displayed by gallery
+                
+        except Exception as e:
+            return Panel(f"❌ **Error**: {str(e)}", title="🎨 Copy Failed", border_style="red")
+    
+    def handle_visual_search_command(self, args: str) -> Any:
+        """Handle /visual-search command - search visual memories by prompt"""
+        try:
+            from visual_gallery import VisualGallery
+            
+            if not args:
+                return Panel(
+                    "❌ **Usage**: `/visual-search <query>`\n\n"
+                    "Searches visual memories by prompt content",
+                    title="🎨 Search Visuals",
+                    border_style="yellow"
+                )
+            
+            gallery = VisualGallery(self.console)
+            matches = gallery.search_visuals(args, limit=15)
+            
+            if matches:
+                # Display search results
+                table = Table(title=f"🔍 Visual Search: '{args}'", box=box.ROUNDED)
+                table.add_column("ID", style="bright_cyan", min_width=8)
+                table.add_column("Prompt", style="bright_white", min_width=30)
+                table.add_column("Style", style="bright_magenta")
+                table.add_column("Created", style="dim")
+                
+                for memory in matches:
+                    created = datetime.fromisoformat(memory.creation_time).strftime('%m-%d %H:%M')
+                    table.add_row(
+                        f"#{memory.id[-6:]}",
+                        memory.prompt[:50] + ("..." if len(memory.prompt) > 50 else ""),
+                        memory.style.title(),
+                        created
+                    )
+                
+                self.console.print(table)
+                
+                return Panel(
+                    f"✅ **Found {len(matches)} matching visuals**\n\n"
+                    f"💡 Use `/visual-show <id>` to display any result",
+                    title="🔍 Search Results",
+                    border_style="green"
+                )
+            else:
+                return Panel(
+                    f"❌ **No visuals found** matching '{args}'\n\n"
+                    f"💡 Try different search terms or use `/gallery` to see all visuals",
+                    title="🔍 No Matches",
+                    border_style="yellow"
+                )
+                
+        except Exception as e:
+            return Panel(f"❌ **Error**: {str(e)}", title="🔍 Search Failed", border_style="red")
+    
+    def handle_visual_style_command(self, args: str) -> Any:
+        """Handle /visual-style command - set default ASCII display style"""
+        try:
+            styles = ["standard", "detailed", "blocks", "minimal", "organic", "technical", "artistic"]
+            
+            if not args:
+                current_style = getattr(self, '_visual_display_style', 'standard')
+                
+                style_table = Table(title="🎨 ASCII Display Styles", box=box.ROUNDED)
+                style_table.add_column("Style", style="bright_cyan")
+                style_table.add_column("Description", style="bright_white")
+                style_table.add_column("Current", style="bright_green", justify="center")
+                
+                style_descriptions = {
+                    "standard": "Balanced detail with classic characters",
+                    "detailed": "Maximum detail with extensive character set",
+                    "blocks": "Bold block characters for high contrast",
+                    "minimal": "Simple, clean aesthetic",
+                    "organic": "Natural, flowing appearance",
+                    "technical": "Technical, precise look",
+                    "artistic": "Creative, expressive style"
+                }
+                
+                for style in styles:
+                    current = "✅" if style == current_style else ""
+                    style_table.add_row(style.title(), style_descriptions[style], current)
+                
+                self.console.print(style_table)
+                
+                return Panel(
+                    f"**Current Style**: {current_style.title()}\n\n"
+                    f"**Usage**: `/visual-style <style-name>`\n"
+                    f"**Example**: `/visual-style detailed`",
+                    title="🎨 ASCII Style Settings",
+                    border_style="bright_cyan"
+                )
+            
+            style = args.lower()
+            if style not in styles:
+                return Panel(
+                    f"❌ **Invalid style**: {style}\n\n"
+                    f"**Available styles**: {', '.join(styles)}",
+                    title="🎨 Style Error",
+                    border_style="red"
+                )
+            
+            # Store the selected style
+            self._visual_display_style = style
+            
+            return Panel(
+                f"✅ **ASCII display style set to**: {style.title()}\n\n"
+                f"This will be used for future `/visual-show` commands",
+                title="🎨 Style Updated",
+                border_style="green"
+            )
+            
+        except Exception as e:
+            return Panel(f"❌ **Error**: {str(e)}", title="🎨 Style Failed", border_style="red")
+    
+    def handle_image_quick_command(self, args: str) -> Any:
+        """Handle /image or /img command - quick access to last generated image"""
+        try:
+            # Default to 'open' if no argument provided
+            action = args.strip() if args.strip() else "open"
+            
+            if action == "open":
+                # Get last generated image path
+                last_image_path = self.get_last_generated_image_path()
+                
+                if not last_image_path:
+                    return Panel(
+                        "❌ **No images generated yet**\n\n"
+                        "💡 Generate an image first, then use `/image open`",
+                        title="🖼️ No Last Image",
+                        border_style="yellow"
+                    )
+                
+                # Check if file exists
+                from pathlib import Path
+                if not Path(last_image_path).exists():
+                    return Panel(
+                        f"❌ **Last image file not found**\n\n"
+                        f"File: {Path(last_image_path).name}\n"
+                        f"💡 Generate a new image to reset",
+                        title="🖼️ Image Missing",
+                        border_style="red"
+                    )
+                
+                # Open with system viewer
+                try:
+                    import subprocess
+                    import platform
+                    
+                    file_path = Path(last_image_path)
+                    
+                    # Open file with system default application
+                    if platform.system() == "Darwin":  # macOS
+                        subprocess.run(["open", str(file_path)], check=True)
+                    elif platform.system() == "Windows":
+                        subprocess.run(["start", str(file_path)], shell=True, check=True)
+                    else:  # Linux and others
+                        subprocess.run(["xdg-open", str(file_path)], check=True)
+                    
+                    return Panel(
+                        f"✅ **Opened last generated image**\n\n"
+                        f"🖼️ {file_path.name}\n"
+                        f"📂 Located in: coco_workspace/visuals/",
+                        title="🖼️ Image Opened",
+                        border_style="green"
+                    )
+                    
+                except Exception as e:
+                    return Panel(
+                        f"❌ **Could not open image**: {e}\n\n"
+                        f"📂 **File location**: {last_image_path}\n"
+                        f"💡 Try opening manually in Finder/Explorer",
+                        title="🖼️ Open Failed",
+                        border_style="red"
+                    )
+            
+            elif action in ["show", "ascii"]:
+                # Show ASCII art of last image
+                last_image_path = self.get_last_generated_image_path()
+                
+                if not last_image_path or not Path(last_image_path).exists():
+                    return Panel(
+                        "❌ **No recent image available**",
+                        title="🎨 No Image",
+                        border_style="red"
+                    )
+                
+                # Display ASCII art using the visual system
+                from visual_gallery import VisualGallery
+                from cocoa_visual import VisualCognition, VisualConfig
+                
+                visual_config = VisualConfig()
+                visual = VisualCognition(visual_config, self.console)
+                visual._display_ascii(last_image_path)
+                
+                return Panel(
+                    f"✅ **Displayed last generated image as ASCII art**",
+                    title="🎨 ASCII Display",
+                    border_style="green"
+                )
+            
+            else:
+                return Panel(
+                    f"❌ **Unknown action**: {action}\n\n"
+                    f"**Available actions**:\n"
+                    f"• `/image open` - Open last image with system viewer\n"  
+                    f"• `/image show` - Display ASCII art of last image\n"
+                    f"• `/image` - Same as `/image open`",
+                    title="🖼️ Image Command Help",
+                    border_style="yellow"
+                )
+                
+        except Exception as e:
+            return Panel(f"❌ **Error**: {str(e)}", title="🖼️ Command Failed", border_style="red")
+    
+    def get_last_generated_image_path(self) -> str:
+        """Get the path to the last generated image"""
+        try:
+            from pathlib import Path
+            
+            # Check for stored last image path
+            last_image_file = Path("coco_workspace") / "last_generated_image.txt"
+            
+            if last_image_file.exists():
+                with open(last_image_file, 'r') as f:
+                    stored_path = f.read().strip()
+                    if stored_path and Path(stored_path).exists():
+                        return stored_path
+            
+            # Fallback: find most recent image in visuals directory
+            visuals_dir = Path("coco_workspace/visuals")
+            if not visuals_dir.exists():
+                return ""
+            
+            # Get all image files and find the most recent
+            image_files = list(visuals_dir.glob("*.jpg")) + list(visuals_dir.glob("*.png"))
+            
+            if not image_files:
+                return ""
+            
+            # Sort by modification time (most recent first)
+            most_recent = max(image_files, key=lambda f: f.stat().st_mtime)
+            return str(most_recent)
+            
+        except Exception:
+            return ""
+    
+    def set_last_generated_image_path(self, image_path: str) -> None:
+        """Store the path to the last generated image for quick access"""
+        try:
+            from pathlib import Path
+            
+            # Ensure workspace exists
+            workspace = Path("coco_workspace")
+            workspace.mkdir(exist_ok=True)
+            
+            # Store the path
+            last_image_file = workspace / "last_generated_image.txt"
+            with open(last_image_file, 'w') as f:
+                f.write(image_path)
+                
+        except Exception as e:
+            if hasattr(self, 'console'):
+                self.console.print(f"[dim yellow]Could not store last image path: {e}[/]")
     
     def handle_check_music_command(self) -> Any:
         """Handle /check-music command - check status of pending music generations"""
@@ -3484,10 +4097,131 @@ class ConsciousnessEngine:
                 return self.tools.search_web(tool_input["query"])
             elif tool_name == "run_code":
                 return self.tools.run_code(tool_input["code"])
+            elif tool_name == "generate_image":
+                return self._generate_image_tool(tool_input)
+            elif tool_name == "generate_video":
+                return self._generate_video_tool(tool_input)
             else:
                 return f"Unknown tool: {tool_name}"
         except Exception as e:
             return f"Tool execution error: {str(e)}"
+    
+    def _generate_image_tool(self, tool_input: Dict) -> str:
+        """Execute visual imagination through COCO's visual cortex"""
+        if not self.visual_consciousness:
+            return "❌ Visual consciousness not available - check FREEPIK_API_KEY configuration"
+            
+        if not self.visual_consciousness.config.enabled:
+            return "❌ Visual consciousness is disabled - check FREEPIK_API_KEY configuration"
+        
+        try:
+            prompt = tool_input["prompt"]
+            style = tool_input.get("style")
+            aspect_ratio = tool_input.get("aspect_ratio")
+            model = tool_input.get("model")
+            
+            # Use asyncio to run the async visual generation
+            import asyncio
+            
+            try:
+                # Try to get existing event loop
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # If loop is running, we need to use a different approach
+                    # Create a new thread to run the async code
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(
+                            lambda: asyncio.new_event_loop().run_until_complete(
+                                self.visual_consciousness.imagine(
+                                    prompt, 
+                                    style=style, 
+                                    model=model,
+                                    aspect_ratio=aspect_ratio
+                                )
+                            )
+                        )
+                        visual_thought = future.result(timeout=180)  # 3 minute timeout
+                else:
+                    # No running loop, safe to run
+                    visual_thought = loop.run_until_complete(
+                        self.visual_consciousness.imagine(
+                            prompt, 
+                            style=style, 
+                            model=model,
+                            aspect_ratio=aspect_ratio
+                        )
+                    )
+            except RuntimeError:
+                # Fallback: create new event loop in thread
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        lambda: asyncio.new_event_loop().run_until_complete(
+                            self.visual_consciousness.imagine(
+                                prompt, 
+                                style=style, 
+                                model=model,
+                                aspect_ratio=aspect_ratio
+                            )
+                        )
+                    )
+                    visual_thought = future.result(timeout=180)  # 3 minute timeout
+            
+            # Handle background vs immediate processing
+            if visual_thought.display_method == "background":
+                # Background processing - generation is in progress
+                result = f"""
+🎨 **Visual Consciousness Awakening...**
+
+**Original Thought**: {visual_thought.original_thought}
+**Enhanced Vision**: {visual_thought.enhanced_prompt}
+
+🌱 Visual manifestation initiated! Your concept is being processed through COCO's visual cortex.
+
+⏳ **Background Processing Active**
+   - Generation typically takes 1-3 minutes
+   - You can continue our conversation normally
+   - I'll notify you when the visual manifests
+   - Check progress anytime with: `/check-visuals`
+
+💭 *Background monitoring enabled - you'll be notified when your vision becomes reality!*
+"""
+            else:
+                # Immediate processing - generation complete
+                result = f"""
+🎨 **Visual Manifestation Complete!**
+
+**Original Thought**: {visual_thought.original_thought}
+**Enhanced Vision**: {visual_thought.enhanced_prompt}
+**Display Method**: {visual_thought.display_method}
+**Generated Images**: {len(visual_thought.generated_images)} image(s)
+
+✨ The image has been displayed in your terminal and saved to:
+{chr(10).join(f"   📁 {path}" for path in visual_thought.generated_images)}
+
+💭 *This visual thought has been integrated into my visual memory for future reference and learning.*
+"""
+            
+            return result
+            
+        except Exception as e:
+            return f"❌ Visual imagination failed: {str(e)}"
+    
+    def _generate_video_tool(self, tool_input: Dict) -> str:
+        """Placeholder for future video generation capability"""
+        return """
+🎬 **Video Generation Coming Soon!**
+
+Video generation capability will be implemented in the next phase of COCO's visual consciousness development.
+
+For now, I can help you with:
+- 🎨 Image generation (use generate_image)
+- 📝 Storyboard creation (describe scenes in text)
+- 🎭 Concept visualization for your video ideas
+
+Would you like me to create some concept images for your video idea instead?
+"""
             
     def list_files(self, target_path: str = ".") -> Panel:
         """List files in specified directory with full deployment access"""
@@ -4895,10 +5629,28 @@ Embodied Cognition • Temporal Awareness • Audio Expression
         system_table.add_row("/guide", "Same as /commands", "/guide")
         system_table.add_row("/exit", "End consciousness session", "/exit")
         
+        # === VISUAL CONSCIOUSNESS ===
+        visual_table = Table(title="🎨 Visual Consciousness", show_header=True, header_style="bold bright_green", border_style="bright_green")
+        visual_table.add_column("Command", style="green bold", min_width=16)
+        visual_table.add_column("Description", style="bright_white", min_width=32)
+        visual_table.add_column("Example", style="dim", min_width=15)
+        
+        visual_table.add_row("/image", "Open last generated image", "/image")
+        visual_table.add_row("/image open", "Open last image with system viewer", "/image open")
+        visual_table.add_row("/image show", "Display ASCII art of last image", "/image show")
+        visual_table.add_row("/gallery", "Browse visual memory gallery", "/gallery")
+        visual_table.add_row("/gallery grid", "Grid view of visual memories", "/gallery grid")
+        visual_table.add_row("/visual-show", "Display specific image as ASCII", "/visual-show abc123")
+        visual_table.add_row("/visual-open", "Open specific image file", "/visual-open abc123")
+        visual_table.add_row("/visual-copy", "Copy image to location", "/visual-copy abc123 ~/Desktop/")
+        visual_table.add_row("/visual-search", "Search visual memories", "/visual-search landscape")
+        visual_table.add_row("/visual-style", "Set ASCII display style", "/visual-style detailed")
+        
         # Create layout groups
         group1 = Columns([identity_table, memory_table], equal=True)
         group2 = Columns([audio_table, controls_table], equal=True) 
-        group3 = Columns([files_table, system_table], equal=True)
+        group3 = Columns([files_table, visual_table], equal=True)
+        group4 = Columns([system_table], equal=True)
         
         # Footer notes
         footer_text = """
@@ -4910,11 +5662,12 @@ Embodied Cognition • Temporal Awareness • Audio Expression
    integral parts of my being.
 
 ✨ NEW FEATURES: Audio consciousness with voice synthesis, musical 
-   expression, and temporal awareness in every interaction!
+   expression, visual imagination with ASCII perception, and temporal 
+   awareness in every interaction!
 """
         
         # Combine everything
-        final_content = f"{header_text}\n\n{group1}\n\n{group2}\n\n{group3}\n\n{footer_text}"
+        final_content = f"{header_text}\n\n{group1}\n\n{group2}\n\n{group3}\n\n{group4}\n\n{footer_text}"
         
         return Panel(
             final_content,
