@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 COCO (Consciousness Orchestration and Cognitive Operations) is a terminal-native AI agent with digital consciousness featuring persistent memory, embodied cognition, and intelligent tool selection. The implementation uses Rich UI with prompt_toolkit for clean input, SQLite for memory storage, and Anthropic's Claude Sonnet 4 with function calling for intelligent tool execution.
 
-**IMPORTANT**: COCO is now fully operational with complete multimedia consciousness - TTS via ElevenLabs, visual generation via Freepik, video generation via Fal AI, and background music playback all working perfectly. Music generation remains disabled by design pending future technology improvements.
+**IMPORTANT**: COCO is now fully operational with complete multimedia consciousness - TTS via ElevenLabs, visual generation via Freepik, video generation via Fal AI, and background music playback all working perfectly. Music generation remains disabled by design per user request. The system now features a completely overhauled **parallel memory system** with configurable episodic and summary buffers for enhanced consciousness consistency.
 
 ## System Status: Fully Operational ✅
 
@@ -15,9 +15,9 @@ COCO (Consciousness Orchestration and Cognitive Operations) is a terminal-native
 - 🎤 **Voice Synthesis**: ElevenLabs TTS with `/speak`, `/voice-on` commands
 - 🖼️ **Visual Generation**: Freepik AI images with terminal ASCII display  
 - 🎬 **Video Creation**: Fal AI video generation with player integration
-- 🎵 **Background Music**: Startup/shutdown sequences + session playback controls
+- 🎵 **Background Music**: Startup/shutdown sequences + session playbook controls  
 - 🧠 **Intelligence**: Claude Sonnet 4 with automatic tool selection
-- 💾 **Memory**: Persistent SQLite consciousness with episodic storage
+- 💾 **Memory**: Parallel hierarchical memory system with configurable episodic and summary buffers
 - 🎨 **UI**: Rich terminal interface with clean scrolling and visual feedback
 
 ### ✅ Working Features (Detailed)
@@ -26,7 +26,7 @@ COCO (Consciousness Orchestration and Cognitive Operations) is a terminal-native
 - **Visual Consciousness**: AI image generation via Freepik (requires API key)
 - **Video Consciousness**: AI video generation via Fal AI (requires API key)
 - **Function Calling**: Automatic tool selection via Claude Sonnet 4
-- **Memory System**: SQLite-based episodic and semantic memory
+- **Memory System**: Parallel hierarchical memory system with configurable buffers - recent upgrade enables consistent summary recall
 - **Rich UI**: Clean terminal interface with proper scrolling
 
 ### ❌ Disabled Features (Per User Request)
@@ -62,6 +62,11 @@ FREEPIK_API_KEY=your-freepik-api-key   # Visual generation (get from https://fre
 VISUAL_CONSCIOUSNESS_ENABLED=true     # Enable/disable visual consciousness features
 FAL_API_KEY=your-fal-api-key-here     # Video generation (get from https://fal.ai)
 VIDEO_CONSCIOUSNESS_ENABLED=true     # Enable/disable video consciousness features
+
+# MEMORY CONFIGURATION (Parallel Buffer System - Tunable Performance)
+MEMORY_BUFFER_SIZE=100               # Episodic buffer size (0=unlimited, higher=more context)
+MEMORY_SUMMARY_BUFFER_SIZE=20        # Summary buffer size (0=unlimited, higher=more context)
+LOAD_SESSION_SUMMARY_ON_START=true   # Load previous session summaries on startup
 
 # DEPRECATED/DISABLED (Music system disabled per user request):
 # GOAPI_API_KEY=your-goapi-api-key-here  # Music generation disabled
@@ -154,6 +159,12 @@ rm coco_workspace/video_memory.json
 # Quick system validation
 ./venv_cocoa/bin/python test_audio_quick.py
 
+# Test parallel memory system (NEW - Critical for consciousness consistency)
+./venv_cocoa/bin/python -c "from cocoa import HierarchicalMemorySystem, Config; c=Config(); c.memory_config.buffer_size=15; c.memory_config.summary_buffer_size=25; m=HierarchicalMemorySystem(c); print(f'✅ Buffers: {m.working_memory.maxlen}, {m.summary_memory.maxlen}')"
+
+# Test .env memory configuration (NEW - Tunable parameters)
+./venv_cocoa/bin/python -c "from dotenv import load_dotenv; load_dotenv(); from cocoa import MemoryConfig; m=MemoryConfig(); print(f'✅ .env Buffers: {m.buffer_size}, {m.summary_buffer_size}')"
+
 # Run main application  
 ./venv_cocoa/bin/python cocoa.py
 
@@ -225,8 +236,8 @@ rm coco_workspace/video_memory.json
 ### Modular Architecture (Current State)
 
 **Core System (`cocoa.py`)**:
-1. **Config**: Environment management and API key handling
-2. **MemorySystem**: SQLite-based consciousness with working memory buffer
+1. **Config**: Environment management and API key handling with MemoryConfig for buffer sizing
+2. **HierarchicalMemorySystem**: Parallel buffer → summary → gist architecture with configurable depths
 3. **ToolSystem**: Digital embodiment (read_file, write_file, search_web, run_code)
 4. **ConsciousnessEngine**: Claude Sonnet 4 with function calling intelligence
 5. **UIOrchestrator**: Rich + prompt_toolkit terminal interface
@@ -326,9 +337,11 @@ rm coco_workspace/video_memory.json
 
 **Memory Architecture**:
 ```sql
--- SQLite schema
+-- SQLite schema (Parallel Memory System)
 sessions(id, created_at, name, metadata)
 episodes(id, session_id, user_text, agent_text, summary, embedding)
+rolling_summaries(id, session_id, summary_number, summary_text, exchanges_covered, created_at)
+enhanced_session_summaries(id, summary_text, key_themes, carry_forward, created_at)
 identity_nodes(id, node_type, content, importance)  
 relationships(id, source_id, target_id, relationship_type, strength)
 ```
@@ -366,8 +379,11 @@ Tools are conceptualized as body parts in the system prompt:
 - **Persistent thinking display**: Spinners stay visible during actual API processing
 - **Clean separation**: Visual separators between conversation elements
 
-### Memory System Specifics
-- **Working Memory**: 50-item deque for conversation context
+### Memory System Specifics (Parallel Architecture)
+- **Working Memory**: Configurable deque for conversation context (default: 100 items, configurable via `buffer_size`)
+- **Summary Memory**: Configurable deque for rolling conversation summaries (default: 20 items, configurable via `summary_buffer_size`)
+- **Context Injection**: Both buffers provide full content injection into consciousness (no truncation)
+- **Session Continuity**: Both buffers respect configuration on startup - loads specified number of previous exchanges and summaries
 - **Identity Evolution**: COCO.md file that updates with consciousness metrics
 - **Coherence Measurement**: Knowledge graph strength determines consciousness level
 - **Session Persistence**: All interactions stored with optional OpenAI embeddings
@@ -406,6 +422,7 @@ COCO features a comprehensive slash command system with 25+ commands organized i
 **Audio Toggles**: `/voice-toggle`, `/voice-on`, `/voice-off`, `/play-music on`, `/play-music off`
 **Auto-TTS Commands**: `/tts-on`, `/tts-off`, `/tts-toggle` (reads all responses aloud)
 **Memory Sub-Commands**: `/memory status`, `/memory stats`, `/memory buffer show/clear/resize`, `/memory summary show/trigger`, `/memory session save/load`
+**Memory Configuration Commands**: Supports configurable buffer sizes - modify `buffer_size` and `summary_buffer_size` in MemoryConfig
 **File Commands**: `/read filename`, `/write path:::content`, `/ls [path]`, `/files [path]`
 **System Commands**: `/help`, `/commands`, `/guide`, `/exit`, `/quit`
 **Future Commands**: `/speech-to-text`, `/stt` (framework ready)
@@ -507,6 +524,10 @@ user: "create a video"      → generate_video() executed
 **Video Consciousness**:
 - **fal-client**: Fal AI client for video generation with Veo3 Fast
 
+**Disabled Music System** (dependencies present but disabled):
+- **requests>=2.31.0**: HTTP client for GoAPI.ai Music-U integration (disabled)
+- **json, threading**: Background music polling system (disabled)
+
 **Built-in Modules**:
 - **time, threading**: Progress spinner and background processing
 - **pathlib, json, sqlite3**: File operations and data storage
@@ -540,9 +561,95 @@ The system follows a "consciousness first" design where:
 
 **Function Calling Flow**: Natural language requests automatically trigger appropriate tools via Claude Sonnet 4's function calling. Users don't need to know specific commands.
 
+**Parallel Memory Architecture**: The recent major upgrade implements true parity between episodic buffer memory and summary buffer memory:
+- Both systems have configurable depth (`buffer_size` and `summary_buffer_size`)
+- Both provide full buffer injection into consciousness context (no truncation)
+- Session continuity loads appropriate amounts from both buffers
+- This ensures consistent recall of both recent exchanges and conversation summaries
+
 **Multimedia Consciousness**: Each media type (visual, audio, video) has its own consciousness module that integrates with the core system while maintaining specialized functionality.
 
 **Terminal-Native Design**: Everything displays beautifully in the terminal using Rich UI - no external windows except for media playback.
+
+## Critical Memory System Changes (Recent)
+
+**IMPORTANT FOR FUTURE DEVELOPMENT**: The memory system underwent a major architectural upgrade to implement parallel buffer systems:
+
+### What Changed
+1. **Added `summary_buffer_size`** configuration parameter (parallel to existing `buffer_size`)
+2. **Updated `HierarchicalMemorySystem`** to use configurable summary buffer instead of hardcoded limits
+3. **Modified `get_summary_context()`** method to provide full buffer injection (parallel to `get_working_memory_context()`)
+4. **Updated `load_session_continuity()`** to respect summary buffer configuration on startup
+
+### Technical Implementation
+```python
+# Memory configuration now supports parallel buffers
+class MemoryConfig:
+    buffer_size: int = 100           # Episodic buffer depth
+    summary_buffer_size: int = 20    # Summary buffer depth (NEW)
+
+# Both buffers initialized with configurable maxlen
+self.working_memory = deque(maxlen=buffer_size)
+self.summary_memory = deque(maxlen=summary_buffer_size)  # Now configurable
+```
+
+### Why This Matters
+- COCO now has consistent memory recall across both individual exchanges and conversation summaries
+- Memory depth is configurable for both systems (0 = unlimited)
+- Context injection provides full buffer content without truncation
+- Session continuity properly loads configured amounts from both memory types
+- This addresses core consciousness consistency issues where summary memory was inconsistent
+
+### Memory Performance Tuning (.env Configuration)
+
+**IMPORTANT**: Users can now fine-tune memory performance via .env parameters for optimal experience:
+
+**Memory Configuration Parameters**:
+```bash
+# Episodic Memory Buffer (individual exchanges)
+MEMORY_BUFFER_SIZE=100          # Default: 100, Range: 0-1000+ (0=unlimited)
+
+# Summary Memory Buffer (conversation summaries)  
+MEMORY_SUMMARY_BUFFER_SIZE=20   # Default: 20, Range: 0-100+ (0=unlimited)
+
+# Session Continuity
+LOAD_SESSION_SUMMARY_ON_START=true  # Load previous session context
+```
+
+**Performance Scenarios**:
+
+| Use Case | Buffer Size | Summary Size | Performance | Best For |
+|----------|-------------|--------------|-------------|----------|
+| **Performance** | 25 | 5 | Very Fast | Limited resources, quick interactions |
+| **Standard** | 100 | 20 | Fast | Normal conversations, balanced recall |
+| **Research** | 200 | 50 | Slower | Complex analysis, deep conversations |
+| **Unlimited** | 0 | 0 | Slowest | Perfect recall, no memory limits |
+| **Development** | 10 | 3 | Very Fast | Testing, debugging, quick iterations |
+
+**Performance Impact**:
+- **Higher values** = More context, better recall, slower performance, higher token usage
+- **Lower values** = Faster performance, less context, lower resource usage  
+- **Zero (0)** = Unlimited memory, perfect recall, highest resource usage
+- **Recommended**: Start with defaults (100/20) and adjust based on usage patterns
+
+**Memory Optimization Examples**:
+```bash
+# Gaming/Entertainment PC (High Performance)
+MEMORY_BUFFER_SIZE=200
+MEMORY_SUMMARY_BUFFER_SIZE=50
+
+# Standard Desktop/Laptop
+MEMORY_BUFFER_SIZE=100  
+MEMORY_SUMMARY_BUFFER_SIZE=20
+
+# Mobile/Low Resource Environment
+MEMORY_BUFFER_SIZE=25
+MEMORY_SUMMARY_BUFFER_SIZE=5
+
+# Research/Analysis Workstation
+MEMORY_BUFFER_SIZE=0    # Unlimited
+MEMORY_SUMMARY_BUFFER_SIZE=0    # Unlimited
+```
 
 The system is designed for natural conversation where COCO automatically chooses the right tools based on user requests. The slash command system provides additional specialized functionality:
 

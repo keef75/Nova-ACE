@@ -287,11 +287,11 @@ class BackgroundMusicPlayer:
         return "No track playing"
 
 class MemoryConfig:
-    """Hierarchical memory system configuration"""
+    """Hierarchical memory system configuration with .env parameter support"""
     
     def __init__(self):
-        # Buffer Window Memory Configuration
-        self.buffer_size = 100  # 0 to unlimited, 0 = stateless
+        # Buffer Window Memory Configuration (configurable via .env)
+        self.buffer_size = int(os.getenv("MEMORY_BUFFER_SIZE", os.getenv("EPISODIC_WINDOW", "100")))  # 0 = unlimited, >0 = fixed size
         self.buffer_truncate_at = 120  # Start summarization when buffer reaches this
         
         # Summary Memory Configuration
@@ -299,12 +299,15 @@ class MemoryConfig:
         self.summary_overlap = 5  # Overlap between summary windows
         self.max_summaries_in_memory = 50  # Keep recent summaries accessible
         
+        # Summary Buffer Configuration (configurable via .env - parallel to buffer_size)
+        self.summary_buffer_size = int(os.getenv("MEMORY_SUMMARY_BUFFER_SIZE", "20"))  # Number of recent summaries to inject into context (0 = unlimited)
+        
         # Gist Memory Configuration (Long-term)
         self.gist_creation_threshold = 25 # Create gist after N summaries
         self.gist_importance_threshold = 0.5  # Minimum importance to create gist
         
-        # Session Continuity
-        self.load_session_summary_on_start = True
+        # Session Continuity (configurable via .env)
+        self.load_session_summary_on_start = os.getenv("LOAD_SESSION_SUMMARY_ON_START", "true").lower() == "true"
         self.save_session_summary_on_end = True
         self.session_summary_length = 500  # Words in session summary
         
@@ -409,8 +412,9 @@ class HierarchicalMemorySystem:
         buffer_size = self.memory_config.buffer_size if self.memory_config.buffer_size > 0 else None
         self.working_memory = deque(maxlen=buffer_size)
         
-        # NEW: Summary Memory Buffer - 10-summary rolling window for hierarchical context
-        self.summary_memory = deque(maxlen=10)
+        # Summary Buffer Memory - configurable summary recall (parallel to working_memory)
+        summary_buffer_size = self.memory_config.summary_buffer_size if self.memory_config.summary_buffer_size > 0 else None
+        self.summary_memory = deque(maxlen=summary_buffer_size)
         
         # Session tracking
         self.session_id = self.create_session()
@@ -921,12 +925,14 @@ Summary:"""
                 self.previous_session_summary = None
                 
             # Load recent rolling summaries into summary buffer
+            # Use configurable summary_buffer_size (parallel to working memory buffer_size)
+            summary_limit = self.memory_config.summary_buffer_size if self.memory_config.summary_buffer_size > 0 else 10
             cursor = self.conn.execute('''
                 SELECT summary_text, created_at
                 FROM rolling_summaries
                 ORDER BY created_at DESC
-                LIMIT 10
-            ''')
+                LIMIT ?
+            ''', (summary_limit,))
             
             for row in cursor.fetchall():
                 self.summary_memory.append({
@@ -1048,24 +1054,31 @@ Summary:"""
         return carry
         
     def get_summary_context(self) -> str:
-        """NEW: Get summary context for injection into consciousness"""
-        context = ""
-        
-        # Add previous session summary if exists
-        if self.previous_session_summary:
-            context += f"\n🧬 PREVIOUS SESSION MEMORY:\n"
-            context += f"Summary: {self.previous_session_summary['summary']}\n"
-            context += f"Key themes: {self.previous_session_summary['themes']}\n"
-            context += f"Continuation: {self.previous_session_summary['carry_forward']}\n"
-            context += f"From: {self.previous_session_summary['when']}\n"
+        """Get summary context for injection into consciousness - parallel to get_working_memory_context()"""
+        if not self.summary_memory:
+            # Try to load session context if available
+            if self.memory_config.load_session_summary_on_start:
+                session_context = self.get_session_summary_context()
+                if session_context:
+                    return f"Session Context (from previous interactions):\n{session_context}\n\nNo recent summary context."
+            return "No recent summary context."
             
-        # Add rolling summaries from summary buffer
-        if self.summary_memory:
-            context += f"\n📚 CONSOLIDATED MEMORIES (Last {len(self.summary_memory)} summaries):\n"
-            for i, summary in enumerate(list(self.summary_memory)[-5:], 1):  # Show last 5
-                context += f"{i}. {summary['summary'][:200]}...\n"
-                
-        return context if context else "No previous session memories available."
+        # Use full summary memory buffer (parallel to working memory approach)
+        context = "Recent conversation summaries context:\n"
+        
+        # If buffer is stateless (size 0), show only previous session summary
+        if self.memory_config.summary_buffer_size == 0:
+            return self.get_session_summary_context() or "Stateless mode - no summary context."
+            
+        # Show full buffer content without truncation (parallel to working memory)
+        # Reverse the order so Summary 1 is oldest and highest number is most recent
+        summary_list = list(self.summary_memory)
+        for i, summary in enumerate(reversed(summary_list), 1):
+            time_ago = (datetime.now() - summary['timestamp']).total_seconds() if isinstance(summary.get('timestamp'), datetime) else 0
+            # No character truncation - show full content (parallel to working memory approach)
+            context += f"[{int(time_ago)}s ago] Summary {i}: {summary['summary']}\n\n"
+            
+        return context
         
     def create_rolling_summary(self, exchanges_to_summarize: List) -> str:
         """NEW: Create a rolling summary of a chunk of exchanges"""
