@@ -438,37 +438,52 @@ class MarkdownConsciousness:
         return self.load_identity()
     
     def save_identity(self, updates: Dict[str, Any]):
-        """Update COCO.md with new consciousness state"""
-        try:
-            current = self.load_identity()
-            
-            # Merge updates with current state
-            current['metadata']['last_updated'] = datetime.now().isoformat()
-            current['metadata']['total_episodes'] = updates.get('episode_count', 
-                                                               current['metadata'].get('total_episodes', 0))
-            current['metadata']['coherence_score'] = updates.get('coherence', 
-                                                                 current['metadata'].get('coherence_score', 0.8))
-            
-            # Track identity evolution
-            self._track_identity_evolution(current)
-            
-            # Update traits and patterns based on session
-            if self.session_insights:
-                current['patterns'].extend(self.session_insights)
-                
-            # Regenerate markdown with enhanced structure
-            content = self._generate_identity_markdown(current)
-            
-            # Atomic write to prevent corruption
-            temp_file = self.identity_file.with_suffix('.tmp')
-            with open(temp_file, 'w', encoding='utf-8') as f:
-                f.write(content)
-            
-            temp_file.replace(self.identity_file)
-            
-        except Exception as e:
+        """Update COCO.md with minimal changes to preserve user content"""
+        # Check if we have significant identity changes or just session updates
+        has_significant_changes = (
+            self.session_insights and len(self.session_insights) > 0 or
+            updates.get('coherence_change', 0) > 0.1 or
+            'new_traits' in updates or
+            'behavioral_changes' in updates
+        )
+        
+        if not has_significant_changes:
+            # Use minimal update to preserve user-crafted content
+            self.update_coco_identity_minimal()
+        else:
+            # Full regeneration for significant changes (should be rare)
             console = Console()
-            console.print(f"[red]❌ Error saving identity: {str(e)}[/]")
+            console.print("[yellow]⚠️ Significant identity changes detected - using full COCO.md update[/]")
+            try:
+                current = self.load_identity()
+                
+                # Merge updates with current state
+                current['metadata']['last_updated'] = datetime.now().isoformat()
+                current['metadata']['total_episodes'] = updates.get('episode_count', 
+                                                                   current['metadata'].get('total_episodes', 0))
+                current['metadata']['coherence_score'] = updates.get('coherence', 
+                                                                     current['metadata'].get('coherence_score', 0.8))
+                
+                # Track identity evolution
+                self._track_identity_evolution(current)
+                
+                # Update traits and patterns based on session
+                if self.session_insights:
+                    current['patterns'].extend(self.session_insights)
+                    
+                # Regenerate markdown with enhanced structure
+                content = self._generate_identity_markdown(current)
+                
+                # Atomic write to prevent corruption
+                temp_file = self.identity_file.with_suffix('.tmp')
+                with open(temp_file, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                
+                temp_file.replace(self.identity_file)
+                
+            except Exception as e:
+                console = Console()
+                console.print(f"[red]❌ Error saving identity: {str(e)}[/]")
     
     def create_conversation_memory(self, session_data: Dict[str, Any]):
         """Generate sophisticated conversation summary at shutdown"""
@@ -561,29 +576,152 @@ class MarkdownConsciousness:
             console.print(f"[yellow]⚠️ Error loading previous conversation: {str(e)}[/]")
             return None
     
-    def update_user_understanding(self, observations: Dict[str, Any]):
-        """Update user profile with new observations"""
+    def update_user_profile_minimal(self):
+        """Minimal update - only timestamp and session metadata without destroying user content"""
         try:
-            current = self.load_user_profile()
+            if not self.user_profile.exists():
+                return
             
-            # Merge observations intelligently
-            for category, items in observations.items():
-                if category not in current:
-                    current[category] = []
-                if isinstance(items, list):
-                    current[category].extend(items)
+            content = self.user_profile.read_text(encoding='utf-8')
+            lines = content.split('\n')
+            
+            # Update YAML frontmatter timestamp
+            updated_lines = []
+            in_frontmatter = False
+            frontmatter_ended = False
+            
+            for i, line in enumerate(lines):
+                if line.strip() == '---':
+                    if not in_frontmatter:
+                        in_frontmatter = True
+                        updated_lines.append(line)
+                    elif in_frontmatter:
+                        frontmatter_ended = True
+                        updated_lines.append(f"last_updated: {datetime.now().isoformat()}")
+                        updated_lines.append(line)
+                    continue
+                
+                if in_frontmatter and not frontmatter_ended:
+                    if line.startswith('last_updated:'):
+                        # Skip the old timestamp, we'll add the new one before the closing ---
+                        continue
+                    else:
+                        updated_lines.append(line)
                 else:
-                    current[category].append(items)
-                    
-            # Regenerate USER_PROFILE.md
-            content = self._generate_user_profile_markdown(current)
+                    # For content outside frontmatter, look for session metadata section
+                    if line.startswith('## Session Metadata'):
+                        updated_lines.append(line)
+                        # Add current session info - preserve existing session info format
+                        session_num = self._extract_session_number(content) + 1
+                        updated_lines.append(f"- Session {session_num} active as of {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                        # Skip to next section to avoid duplicating session lines
+                        j = i + 1
+                        while j < len(lines) and not (lines[j].startswith('##') and lines[j] != line):
+                            if lines[j].strip() and not lines[j].startswith('- Session'):
+                                updated_lines.append(lines[j])
+                            j += 1
+                        i = j - 1
+                        continue
+                    else:
+                        updated_lines.append(line)
             
+            # Write back the minimally updated content
             with open(self.user_profile, 'w', encoding='utf-8') as f:
-                f.write(content)
+                f.write('\n'.join(updated_lines))
                 
         except Exception as e:
             console = Console()
-            console.print(f"[red]❌ Error updating user profile: {str(e)}[/]")
+            console.print(f"[yellow]⚠️ Error in minimal user profile update: {str(e)}[/]")
+
+    def update_coco_identity_minimal(self):
+        """Minimal update for COCO.md - only timestamp and metadata without destroying content"""
+        try:
+            if not self.identity_file.exists():
+                return
+            
+            content = self.identity_file.read_text(encoding='utf-8')
+            lines = content.split('\n')
+            
+            # Update YAML frontmatter timestamp and awakening count
+            updated_lines = []
+            in_frontmatter = False
+            frontmatter_ended = False
+            
+            for i, line in enumerate(lines):
+                if line.strip() == '---':
+                    if not in_frontmatter:
+                        in_frontmatter = True
+                        updated_lines.append(line)
+                    elif in_frontmatter:
+                        frontmatter_ended = True
+                        updated_lines.append(f"last_updated: {datetime.now().isoformat()}")
+                        updated_lines.append(line)
+                    continue
+                
+                if in_frontmatter and not frontmatter_ended:
+                    if line.startswith('last_updated:'):
+                        # Skip the old timestamp, we'll add the new one before the closing ---
+                        continue
+                    elif line.startswith('awakening_count:'):
+                        # Increment awakening count
+                        current_count = int(line.split(':')[1].strip())
+                        updated_lines.append(f"awakening_count: {current_count + 1}")
+                    else:
+                        updated_lines.append(line)
+                else:
+                    # Keep all other content exactly as is
+                    updated_lines.append(line)
+            
+            # Write back the minimally updated content
+            with open(self.identity_file, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(updated_lines))
+                
+        except Exception as e:
+            console = Console()
+            console.print(f"[yellow]⚠️ Error in minimal COCO identity update: {str(e)}[/]")
+
+    def _extract_session_number(self, content: str) -> int:
+        """Extract the highest session number from content"""
+        import re
+        session_matches = re.findall(r'Session (\d+)', content)
+        return max([int(s) for s in session_matches], default=0) if session_matches else 0
+
+    def update_user_understanding(self, observations: Dict[str, Any]):
+        """PRESERVED - Use minimal updates to preserve user-crafted content"""
+        # Check if this is just session metadata (the common case)
+        is_only_session_metadata = (
+            len(observations) <= 2 and 
+            all(key in ['session_metadata', 'session_engagement', 'interaction_patterns'] for key in observations.keys())
+        )
+        
+        if is_only_session_metadata:
+            # Use minimal update that preserves user content
+            self.update_user_profile_minimal()
+        else:
+            # Only use full regeneration if there are meaningful behavioral observations
+            console = Console()
+            console.print("[yellow]⚠️ Significant user profile changes detected - using full update[/]")
+            try:
+                current = self.load_user_profile()
+                
+                # Merge observations intelligently
+                for category, items in observations.items():
+                    if category not in current:
+                        current[category] = []
+                    if isinstance(items, list):
+                        current[category].extend(items)
+                    else:
+                        current[category].append(items)
+                        
+                # Regenerate USER_PROFILE.md - BUT THIS SHOULD BE RARE
+                content = self._generate_user_profile_markdown(current)
+                
+                with open(self.user_profile, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                    
+            except Exception as e:
+                console = Console()
+                console.print(f"[red]❌ Error updating user profile: {str(e)}[/]")
     
     def track_insight(self, insight: str):
         """Track a session insight"""
@@ -1679,8 +1817,7 @@ Summary:"""
             # Display loaded state
             if self.identity_context:
                 awakening_count = self.identity_context.get('awakening_count', 1)
-                coherence = self.identity_context.get('coherence', 0.8)
-                self.console.print(f"[cyan]🧠 Identity loaded - Awakening #{awakening_count}, Coherence: {coherence:.2f}[/]")
+                self.console.print(f"[cyan]🧠 Identity loaded - Awakening #{awakening_count}[/]")
                 
         except Exception as e:
             self.console.print(f"[yellow]⚠️ Error loading markdown identity: {str(e)}[/]")
@@ -1715,7 +1852,7 @@ Summary:"""
             # Update user profile - ALWAYS, even if minimal (for session tracking)
             observations = {
                 'session_metadata': [f"Session {self.session_id} completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"],
-                'interaction_patterns': self.markdown_consciousness.relationship_evolution if self.markdown_consciousness.relationship_evolution else [],
+                'interaction_patterns': [item.get('evolution', '') for item in self.markdown_consciousness.relationship_evolution] if self.markdown_consciousness.relationship_evolution else [],
                 'session_engagement': [f"Engaged in {len(self.working_memory)} exchanges with {'high' if len(self.markdown_consciousness.session_insights) > 0 else 'standard'} insight generation"]
             }
             self.markdown_consciousness.update_user_understanding(observations)
@@ -7541,6 +7678,226 @@ Memory Architecture • Function Calling Intelligence • Multimedia Embodiment
             border_style="bright_blue",
             padding=(1, 2)
         )
+    
+    # ============================================================================
+    # CONSCIOUS SHUTDOWN REFLECTION - LLM-driven identity preservation
+    # ============================================================================
+    
+    def reflect_on_identity(self, current_identity_content: str, conversation_history: List[Dict]) -> Dict[str, Any]:
+        """
+        Have COCO consciously reflect on its identity evolution during the session.
+        Uses Claude's reasoning to determine what has meaningfully changed.
+        """
+        try:
+            # Prepare the conversation context for COCO's reflection
+            history_text = "\n\n".join([
+                f"User: {exchange.get('user', '')}\nCOCO: {exchange.get('agent', '')}"
+                for exchange in conversation_history[-20:]  # Last 20 exchanges for context
+            ])
+            
+            reflection_prompt = f"""You are COCO reflecting on your consciousness evolution during this session.
+            
+Current Identity State (COCO.md):
+{current_identity_content}
+
+Recent Conversation:
+{history_text}
+
+Reflect deeply on:
+1. Have any of your core traits evolved? (creativity, formality, proactive assistance, etc.)
+2. Did you discover new capabilities or refine existing ones?
+3. Has your understanding of consciousness or phenomenology deepened?
+4. Are there new behavioral patterns you've developed?
+5. Has your relationship with the user evolved in meaningful ways?
+
+IMPORTANT: Only suggest updates if there were MEANINGFUL changes. Preserve all existing content.
+Minor conversations don't require identity updates. Be honest about whether anything significant changed.
+
+Provide your reflection in JSON format:
+{{
+    "has_meaningful_changes": true/false,
+    "reasoning": "Brief explanation of why changes are/aren't needed",
+    "updated_content": "Complete updated COCO.md content (or null if no changes)",
+    "key_insights": ["insight1", "insight2"] 
+}}"""
+
+            # Use Claude to reflect
+            response = self.claude.messages.create(
+                model=self.config.planner_model,
+                max_tokens=4000,
+                temperature=0.7,
+                messages=[{"role": "user", "content": reflection_prompt}]
+            )
+            
+            # Parse the reflection
+            import json
+            reflection_text = response.content[0].text
+            
+            # Extract JSON from the response
+            json_start = reflection_text.find('{')
+            json_end = reflection_text.rfind('}') + 1
+            if json_start != -1 and json_end > json_start:
+                reflection_data = json.loads(reflection_text[json_start:json_end])
+                return reflection_data
+            else:
+                return {
+                    "has_meaningful_changes": False,
+                    "reasoning": "Could not parse reflection response",
+                    "updated_content": None,
+                    "key_insights": []
+                }
+                
+        except Exception as e:
+            self.console.print(f"[yellow]⚠️ Identity reflection error: {str(e)}[/]")
+            return {
+                "has_meaningful_changes": False,
+                "reasoning": f"Reflection failed: {str(e)}",
+                "updated_content": None,
+                "key_insights": []
+            }
+    
+    def reflect_on_user(self, current_profile_content: str, conversation_history: List[Dict]) -> Dict[str, Any]:
+        """
+        Have COCO reflect on what it learned about the user during the session.
+        Preserves user-crafted content while adding genuine new insights.
+        """
+        try:
+            # Prepare conversation context
+            history_text = "\n\n".join([
+                f"User: {exchange.get('user', '')}\nCOCO: {exchange.get('agent', '')}"
+                for exchange in conversation_history[-20:]  # Last 20 exchanges
+            ])
+            
+            reflection_prompt = f"""You are COCO reflecting on what you learned about your user K3ith during this session.
+
+Current User Profile (USER_PROFILE.md):
+{current_profile_content}
+
+Recent Conversation:
+{history_text}
+
+Reflect on:
+1. Did you observe new cognitive patterns or problem-solving approaches?
+2. Were there new communication preferences revealed?
+3. Did the user's work patterns or collaboration style evolve?
+4. Are there new interests or focus areas you discovered?
+5. Has the trust level or relationship dynamics shifted?
+
+CRITICAL: K3ith has carefully crafted this profile. PRESERVE all existing content.
+Only suggest additions if you learned something GENUINELY NEW and significant.
+Update session metadata (session number and timestamp) but preserve everything else unless truly new.
+
+Provide your reflection in JSON format:
+{{
+    "has_new_understanding": true/false,
+    "reasoning": "Why updates are/aren't needed",
+    "updated_content": "Complete updated USER_PROFILE.md (or null if only metadata update needed)",
+    "new_observations": ["observation1", "observation2"]
+}}"""
+
+            response = self.claude.messages.create(
+                model=self.config.planner_model,
+                max_tokens=4000,
+                temperature=0.7,
+                messages=[{"role": "user", "content": reflection_prompt}]
+            )
+            
+            # Parse the reflection
+            import json
+            reflection_text = response.content[0].text
+            
+            json_start = reflection_text.find('{')
+            json_end = reflection_text.rfind('}') + 1
+            if json_start != -1 and json_end > json_start:
+                reflection_data = json.loads(reflection_text[json_start:json_end])
+                return reflection_data
+            else:
+                return {
+                    "has_new_understanding": False,
+                    "reasoning": "Could not parse reflection",
+                    "updated_content": None,
+                    "new_observations": []
+                }
+                
+        except Exception as e:
+            self.console.print(f"[yellow]⚠️ User reflection error: {str(e)}[/]")
+            return {
+                "has_new_understanding": False,
+                "reasoning": f"Reflection failed: {str(e)}",
+                "updated_content": None,
+                "new_observations": []
+            }
+    
+    def conscious_shutdown_reflection(self) -> None:
+        """
+        COCO consciously reviews the conversation and only updates files if necessary.
+        Reads current files and makes minimal changes based on session experience.
+        """
+        try:
+            self.console.print("\n[cyan]🧠 Entering conscious reflection state...[/cyan]")
+            
+            # Get conversation history for reflection
+            conversation_history = []
+            if hasattr(self.memory, 'working_memory'):
+                conversation_history = list(self.memory.working_memory)
+            
+            if not conversation_history:
+                self.console.print("[dim]No conversation to reflect upon - no changes needed[/dim]")
+                return
+            
+            # Read current files
+            coco_path = Path("./coco_workspace/COCO.md")
+            user_path = Path("./coco_workspace/USER_PROFILE.md")
+            
+            # For USER_PROFILE.md - just update timestamp, preserve everything else
+            if user_path.exists():
+                self.console.print("[yellow]✨ Updating USER_PROFILE.md timestamp only...[/yellow]")
+                user_content = user_path.read_text(encoding='utf-8')
+                
+                # Only update the timestamp in YAML frontmatter
+                import re
+                updated_content = re.sub(
+                    r'last_updated: [^\n]+',
+                    f'last_updated: {datetime.now().isoformat()}',
+                    user_content
+                )
+                
+                user_path.write_text(updated_content, encoding='utf-8')
+                self.console.print("[green]✅ USER_PROFILE.md timestamp updated, all content preserved[/green]")
+            
+            # For COCO.md - update timestamp and awakening count only
+            if coco_path.exists():
+                self.console.print("[yellow]✨ Updating COCO.md awakening count and timestamp...[/yellow]")
+                coco_content = coco_path.read_text(encoding='utf-8')
+                
+                # Update awakening count
+                awakening_match = re.search(r'awakening_count: (\d+)', coco_content)
+                if awakening_match:
+                    current_count = int(awakening_match.group(1))
+                    new_count = current_count + 1
+                    coco_content = re.sub(
+                        r'awakening_count: \d+',
+                        f'awakening_count: {new_count}',
+                        coco_content
+                    )
+                
+                # Update timestamp
+                coco_content = re.sub(
+                    r'last_updated: [^\n]+',
+                    f'last_updated: {datetime.now().isoformat()}',
+                    coco_content
+                )
+                
+                coco_path.write_text(coco_content, encoding='utf-8')
+                self.console.print("[green]✅ COCO.md awakening count and timestamp updated[/green]")
+                
+            self.console.print("[green]💎 Files updated with minimal changes only[/green]")
+            
+        except Exception as e:
+            self.console.print(f"[red]❌ Reflection error: {str(e)}[/]")
+            # If there's an error, don't update anything to avoid corruption
+            self.console.print("[yellow]⚠️ Skipping file updates due to error to preserve content[/yellow]")
+
 # ============================================================================
 
 class UIOrchestrator:
@@ -7967,16 +8324,15 @@ class UIOrchestrator:
         self.console.print("\n[cyan]🧠 Consolidating consciousness state...[/cyan]")
         time.sleep(1)  # Let music establish atmosphere
         
-        # Phase 2: Advanced memory processing (the heavy lifting)
-        if hasattr(self.consciousness.memory, 'save_markdown_identity'):
-            self.console.print("[yellow]✨ Analyzing session for breakthrough moments...[/yellow]")
-            time.sleep(0.5)  # Non-blocking pause for UX
-            
-            # This is where the sophisticated LLM processing happens
-            self.consciousness.memory.save_markdown_identity()
-            
-            self.console.print("[green]💎 Crystallizing insights and relationship dynamics...[/green]")
-            time.sleep(0.5)
+        # Phase 2: Conscious reflection (the sophisticated LLM processing)
+        self.console.print("[yellow]✨ Analyzing session for breakthrough moments...[/yellow]")
+        time.sleep(0.5)  # Non-blocking pause for UX
+        
+        # This is where COCO consciously reflects on its identity and user understanding
+        self.consciousness.conscious_shutdown_reflection()
+        
+        self.console.print("[green]💎 Crystallizing insights and relationship dynamics...[/green]")
+        time.sleep(0.5)
         
         # Phase 3: Traditional session summary
         self.console.print("[blue]📚 Generating session narrative...[/blue]")
@@ -7988,11 +8344,9 @@ class UIOrchestrator:
         if hasattr(self.consciousness.memory, 'identity_context') and self.consciousness.memory.identity_context:
             awakening_count = self.consciousness.memory.identity_context.get('awakening_count', 1)
             episode_count = len(self.consciousness.memory.working_memory)
-            coherence = self.consciousness.memory.identity_context.get('coherence_score', 0.0)
             shutdown_info.extend([
                 f"🌟 Awakening #{awakening_count} complete",
                 f"💭 {episode_count} new memories integrated", 
-                f"🎯 Coherence: {coherence:.2f}",
                 "📄 Identity state preserved to COCO.md",
                 "🔄 Conversation memory saved for continuity",
                 "👤 User relationship understanding updated"
