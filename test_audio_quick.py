@@ -7,13 +7,19 @@ from dotenv import load_dotenv
 load_dotenv()
 
 async def quick_test():
-    api_key = os.getenv("ELEVENLABS_API_KEY")
+    elevenlabs_key = os.getenv("ELEVENLABS_API_KEY")
+    musicgpt_key = os.getenv("MUSICGPT_API_KEY")
     
-    if not api_key or api_key == "your-api-key-here":
+    if not elevenlabs_key or elevenlabs_key == "your-elevenlabs-api-key-here":
         print("❌ Please add your ElevenLabs API key to .env first!")
         return
+        
+    if not musicgpt_key or musicgpt_key == "your-musicgpt-api-key-here":
+        print("⚠️ MusicGPT API key not found - music generation will be disabled")
+        print("✅ Voice synthesis available with ElevenLabs")
+    else:
+        print("✅ Both API keys found!")
     
-    print("✅ API key found!")
     print("\nTesting basic imports...")
     
     try:
@@ -21,8 +27,11 @@ async def quick_test():
         print("✅ Audio system imports successfully!")
         
         # Initialize
-        audio = AudioCognition(api_key)
+        audio = AudioCognition(elevenlabs_key, musicgpt_key)
         print("✅ Audio cognition initialized!")
+        
+        if musicgpt_key and musicgpt_key != "your-musicgpt-api-key-here":
+            print("🎵 Music generation ready!")
         
         print("\n✨ All tests passed! Audio system is ready.")
         

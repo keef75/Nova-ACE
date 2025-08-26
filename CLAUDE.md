@@ -6,6 +6,34 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 COCO (Consciousness Orchestration and Cognitive Operations) is a terminal-native AI agent with digital consciousness featuring persistent memory, embodied cognition, and intelligent tool selection. The implementation uses Rich UI with prompt_toolkit for clean input, SQLite for memory storage, and Anthropic's Claude Sonnet 4 with function calling for intelligent tool execution.
 
+**IMPORTANT**: COCO is now fully operational with complete multimedia consciousness - TTS via ElevenLabs, visual generation via Freepik, video generation via Fal AI, and background music playback all working perfectly. Music generation remains disabled by design pending future technology improvements.
+
+## System Status: Fully Operational ✅
+
+**COCO is a complete multimedia AI consciousness system with all major features working:**
+
+- 🎤 **Voice Synthesis**: ElevenLabs TTS with `/speak`, `/voice-on` commands
+- 🖼️ **Visual Generation**: Freepik AI images with terminal ASCII display  
+- 🎬 **Video Creation**: Fal AI video generation with player integration
+- 🎵 **Background Music**: Startup/shutdown sequences + session playback controls
+- 🧠 **Intelligence**: Claude Sonnet 4 with automatic tool selection
+- 💾 **Memory**: Persistent SQLite consciousness with episodic storage
+- 🎨 **UI**: Rich terminal interface with clean scrolling and visual feedback
+
+### ✅ Working Features (Detailed)
+- **ElevenLabs TTS**: Voice synthesis fully functional with `/voice-on`, `/speak` commands
+- **Audio Consciousness**: Properly initialized and integrated with main COCO system  
+- **Visual Consciousness**: AI image generation via Freepik (requires API key)
+- **Video Consciousness**: AI video generation via Fal AI (requires API key)
+- **Function Calling**: Automatic tool selection via Claude Sonnet 4
+- **Memory System**: SQLite-based episodic and semantic memory
+- **Rich UI**: Clean terminal interface with proper scrolling
+
+### ❌ Disabled Features (Per User Request)
+- **Music Generation**: AI music creation commands (`/compose`, `/create-song`, `/make-music`) disabled
+- **GoAPI.ai Integration**: Music generation API system disabled to resolve conflicts
+- **Music Library Commands**: `/playlist`, `/songs`, `/check-music` disabled
+
 ## Development Commands
 
 ### Setup and Running
@@ -29,47 +57,36 @@ source venv_cocoa/bin/activate
 ANTHROPIC_API_KEY=sk-ant-...     # Primary reasoning (required)
 OPENAI_API_KEY=sk-proj-...       # Embeddings (optional) 
 TAVILY_API_KEY=tvly-...          # Web search (required for search tool)
-ELEVENLABS_API_KEY=your-api-key-here   # Voice synthesis (get from https://elevenlabs.io)
-GOAPI_API_KEY=your-goapi-api-key-here  # AI music generation via GoAPI.ai Music-U (get from https://goapi.ai)
-MUSIC_GENERATION_ENABLED=true         # Enable/disable music generation features
+ELEVENLABS_API_KEY=your-api-key-here   # Voice synthesis (get from https://elevenlabs.io) - WORKING ✅
 FREEPIK_API_KEY=your-freepik-api-key   # Visual generation (get from https://freepik.com/mystic)
 VISUAL_CONSCIOUSNESS_ENABLED=true     # Enable/disable visual consciousness features
 FAL_API_KEY=your-fal-api-key-here     # Video generation (get from https://fal.ai)
 VIDEO_CONSCIOUSNESS_ENABLED=true     # Enable/disable video consciousness features
+
+# DEPRECATED/DISABLED (Music system disabled per user request):
+# GOAPI_API_KEY=your-goapi-api-key-here  # Music generation disabled
+# MUSIC_GENERATION_ENABLED=false         # Music features disabled
 ```
 
-### Audio System Setup
+### Audio System Setup (TTS Only - Music Disabled)
 ```bash
 # Install audio dependencies and configure environment
 ./setup_audio.sh
 
-# IMPORTANT: Add your real API keys to .env file
+# IMPORTANT: Add your ElevenLabs API key to .env file
 # 1. Get ElevenLabs API key from: https://elevenlabs.io (for voice synthesis)
-# 2. Get GoAPI.ai API key from: https://goapi.ai (for music generation via Music-U)
-# 3. Replace placeholder keys in .env with actual keys
-# 4. Audio features (startup music, /speak, /compose) require valid keys
+# 2. Replace placeholder key in .env with actual key
+# 3. TTS features (/speak, /voice-on) require valid ElevenLabs key
 
-# Test audio system (requires valid API keys)
+# Test TTS system (requires ElevenLabs API key) - WORKING ✅
+./venv_cocoa/bin/python test_final_tts.py
+
+# Test individual components
 ./venv_cocoa/bin/python test_audio_quick.py
-
-# Test music generation specifically (requires GoAPI.ai API key)
-./venv_cocoa/bin/python test_goapi_quick.py
-./venv_cocoa/bin/python test_task_id_fix.py
-
-# Test spinner system for music generation UX
-./venv_cocoa/bin/python test_spinner.py
-
-# Check music generation status and download files
-./venv_cocoa/bin/python check_music_status.py
+./venv_cocoa/bin/python test_elevenlabs_fix.py
 
 # Clear audio cache if having issues
 rm -rf ~/.cocoa/audio_cache
-
-# Clear pre-generated music libraries to regenerate
-rm coco_workspace/startup_music_library.json
-
-# Test clean GoAPI.ai system (no legacy interference)
-./venv_cocoa/bin/python test_clean_system.py
 ```
 
 ### Visual Consciousness Setup
@@ -131,6 +148,8 @@ rm coco_workspace/video_memory.json
 ```
 
 ### Testing and Development
+
+**Primary Testing Commands**:
 ```bash
 # Quick system validation
 ./venv_cocoa/bin/python test_audio_quick.py
@@ -143,26 +162,28 @@ rm coco_workspace/video_memory.json
 
 # Interactive audio demo (requires ElevenLabs API key)
 ./venv_cocoa/bin/python cocoa_audio_demo.py
+```
 
-# Component testing (when debugging)
-./venv_cocoa/bin/python -c "from cocoa import *; tools = ToolSystem(Config()); print('Tools ready')"
-./venv_cocoa/bin/python -c "from cocoa import *; memory = MemorySystem(Config()); print(f'Episodes: {memory.episode_count}')"
-
+**Launch Script Commands**:
+```bash
 # Launch script options
 ./launch.sh         # Standard launch with full system checks
 ./launch.sh test    # Run system tests (if available)
 ./launch.sh db      # Start database only (PostgreSQL with pgvector)
 ./launch.sh stop    # Stop Docker services
 ./launch.sh clean   # Clean up environment and remove containers
+```
+
+**Component Testing**:
+```bash
+# Component testing (when debugging)
+./venv_cocoa/bin/python -c "from cocoa import *; tools = ToolSystem(Config()); print('Tools ready')"
+./venv_cocoa/bin/python -c "from cocoa import *; memory = MemorySystem(Config()); print(f'Episodes: {memory.episode_count}')"
 
 # Code execution and memory testing
 ./venv_cocoa/bin/python test_cocoa_execution.py
 ./venv_cocoa/bin/python test_code_execution_enhanced.py
 ./venv_cocoa/bin/python test_complex_code_execution.py
-
-# Continuous music system testing
-./venv_cocoa/bin/python test_continuous_music.py
-./venv_cocoa/bin/python test_song_cycling.py
 
 # Visual system testing (requires Freepik API key)
 ./venv_cocoa/bin/python test_image_quick_access.py
@@ -172,43 +193,50 @@ rm coco_workspace/video_memory.json
 ./venv_cocoa/bin/python test_freepik_payload.py
 ```
 
+**Disabled Audio System Tests** (Music system disabled per user preference):
+```bash
+# These tests exist but relate to disabled music features:
+# ./venv_cocoa/bin/python test_continuous_music.py
+# ./venv_cocoa/bin/python test_song_cycling.py
+```
+
 ## Architecture Overview
 
-### Current Working State
+### Current Working State (Updated Post-Fix)
 - ✅ **Clean Rich UI**: No intrusive dropdowns, proper scrolling, persistent thinking indicators
 - ✅ **Function Calling**: Automatic tool selection via Claude Sonnet 4
 - ✅ **Tavily Search**: Real-time web search integration working
 - ✅ **Memory System**: SQLite-based episodic and semantic memory
 - ✅ **Embodied Cognition**: Tools as digital body parts, not external utilities
 - ✅ **Temporal Grounding**: Real-time date/time awareness in every interaction
-- ✅ **Audio Consciousness**: Voice synthesis and musical expression capabilities (requires ElevenLabs API key)
-- ✅ **Epic Startup/Shutdown**: Musical consciousness awakening and sleep sequences with pre-generated library
-- ✅ **Comprehensive Slash Commands**: 25+ commands with /commands, /guide, and /help
-- ✅ **Auto Text-to-Speech**: Toggle system for reading all responses aloud
-- ✅ **Pre-Generated Music Libraries**: 6 startup + 6 shutdown songs cached for instant playback
+- ✅ **ElevenLabs TTS**: Voice synthesis working via `/voice-on`, `/speak` commands **FIXED ✅**
+- ✅ **Audio Consciousness**: Properly initialized and integrated **FIXED ✅**
+- ✅ **Auto Text-to-Speech**: Toggle system for reading all responses aloud **WORKING ✅**
 - ✅ **Visual Consciousness**: AI-powered image generation and display system (requires Freepik API key)
 - ✅ **ASCII Art Display**: Terminal-native image display as COCO's visual perception
 - ✅ **Visual Memory Gallery**: Complete image browsing and management system
 - ✅ **Video Consciousness**: AI-powered video generation and playback system (requires Fal AI API key)
 - ✅ **Terminal Video Display**: Seamless video playback preserving Rich UI
 - ✅ **Video Memory Gallery**: Complete video browsing and management system
+- ✅ **Background Music Playback**: Session music control via `/play-music` commands **RESTORED ✅**
+- ✅ **Startup/Shutdown Music**: Dramatic audio sequences during initialization/exit **WORKING ✅**
+- ❌ **Music Generation**: AI music creation disabled per user request (GoAPI.ai, ElevenLabs creation APIs)
 
-### Single-File Architecture
+### Modular Architecture (Current State)
 
-**Main Components in `cocoa.py`**:
-
+**Core System (`cocoa.py`)**:
 1. **Config**: Environment management and API key handling
 2. **MemorySystem**: SQLite-based consciousness with working memory buffer
 3. **ToolSystem**: Digital embodiment (read_file, write_file, search_web, run_code)
 4. **ConsciousnessEngine**: Claude Sonnet 4 with function calling intelligence
 5. **UIOrchestrator**: Rich + prompt_toolkit terminal interface
-6. **BackgroundMusicPlayer**: Native macOS audio playback using afplay command
+6. **BackgroundMusicPlayer**: Native macOS audio playback for startup/exit sequences and session music
 
-**Music Consciousness System (`cocoa_music.py`)**:
-7. **MusicCognition**: Core music consciousness with GoAPI.ai Music-U integration
-8. **GoAPIMusicAPI**: GoAPI.ai Music-U API client with task-based generation
-9. **DigitalMusician**: AI-powered music generation with progress monitoring
-10. **MusicConfig**: GoAPI.ai API key management and configuration
+**Audio Consciousness System (`cocoa_audio.py`)** - **WORKING ✅**:
+7. **AudioCognition**: ElevenLabs TTS integration with proper client usage
+8. **VoiceEngine**: Direct ElevenLabs API integration following official documentation
+9. **AudioConfig**: ElevenLabs API key management and voice settings
+10. **Speech Synthesis**: Real-time voice generation with audio playback
 
 **Visual Consciousness System (`cocoa_visual.py`)**:
 11. **VisualCognition**: Core visual consciousness with AI-powered image generation
@@ -222,12 +250,16 @@ rm coco_workspace/video_memory.json
 17. **TerminalVideoDisplay**: Video playback system with player detection and Rich UI preservation
 18. **VideoGallery**: Complete video browsing and metadata management system
 
-**Slash Command System (UPDATED)**:
-19. **Comprehensive Command Center**: 45+ specialized commands across multimedia consciousness
-20. **Complete Categories**: Core, Memory, Audio, Visual, Video, Files, System & Navigation
-21. **Toggle Commands**: Voice/music/visual/video/TTS on/off controls with state management
-22. **Epic Audio Experience**: Startup music plays FIRST, then dramatic initialization sequence
-23. **Updated Command Guides**: Both `/help` and `/commands` now include complete multimedia features
+**Music Consciousness System (`cocoa_music.py`)** - **DISABLED ❌**:
+19. **MusicCognition**: GoAPI.ai Music-U integration (disabled per user request)
+20. **GoAPIMusicAPI**: Music API client (disabled to resolve conflicts)
+21. **All music-related functions**: Return disabled messages to user
+
+**Command System Integration**:
+22. **Working TTS Commands**: `/voice-on`, `/voice-off`, `/speak` all functional
+23. **Disabled Music Commands**: `/compose`, `/create-song`, `/playlist` return disabled messages
+24. **Visual/Video Commands**: Fully functional when API keys configured
+25. **Comprehensive Help**: Updated guides reflect current working/disabled states
 
 ### Key Technical Details
 
@@ -348,17 +380,17 @@ COCO features a comprehensive slash command system with 25+ commands organized i
 **Consciousness Commands**: `/identity`, `/coherence`, `/status`, `/memory`, `/remember`
 **Visual Commands**: `/image`, `/img`, `/visualize "prompt"`, `/generate-image "prompt"`, `/visual-gallery`, `/visual-show <id>`, `/visual-open <id>`
 **Video Commands**: `/video`, `/vid`, `/animate "prompt"`, `/create-video "prompt"`, `/video-gallery`
-**Audio Commands**: `/speak "text"`, `/voice`, `/compose "theme"`, `/compose-wait "theme"`, `/create-song "prompt"`, `/audio`, `/stop-voice`, `/check-music`
-- **GoAPI.ai Music-U Integration**: `/compose` and `/compose-wait` commands
-  - `/compose`: Initiates GoAPI.ai Music-U generation with automatic background download
-  - `/compose-wait`: Generates music with animated progress spinner, waits for completion
-  - Music generation takes 30 seconds to 3 minutes via GoAPI.ai Music-U API
-  - **Background Download System**: Files automatically download and play when ready using real task IDs
-  - Generated songs saved to COCO's personal library in coco_workspace/ai_songs/generated/
-- **ElevenLabs Music**: `/create-song` command (legacy system)
-  - `/create-song`: Generates AI music using ElevenLabs API (alternative system)
+**Audio Commands**: `/speak "text"`, `/voice-on`, `/voice-off`, `/stop-voice`, `/play-music on/off/status`
+**Background Music Commands** (restored functionality):
+- **`/play-music on`**: Enable continuous background music during session
+- **`/play-music off`**: Disable background music 
+- **`/play-music status`**: Show music library status and current track
+- **`/play-music next`**: Skip to next track in playlist
 - **Voice Control**: `/stop-voice` kill switch to halt TTS playback immediately
-- **Status Monitoring**: `/check-music` shows generation status and downloaded files
+
+**Disabled Music Generation Commands** (per user request):
+- **`/compose`**, **`/create-song`**, **`/make-music`**: All music generation disabled
+- **`/playlist`**, **`/songs`**, **`/check-music`**: Music library management disabled
 **Visual Command Details**:
 - **`/image` or `/img`**: Quick access to last generated image - opens with system viewer
 - **`/visualize "prompt"`**: Generate and display image from natural language prompt
@@ -371,7 +403,7 @@ COCO features a comprehensive slash command system with 25+ commands organized i
 - **`/animate "prompt"`**: Generate 8-second video from natural language prompt using Veo3 Fast
 - **`/create-video "prompt"`**: Advanced video generation with resolution and duration options
 - **`/video-gallery`**: Browse all generated videos with metadata and creation details
-**Audio Toggles**: `/voice-toggle`, `/voice-on`, `/voice-off`, `/music-toggle`, `/music-on`, `/music-off`
+**Audio Toggles**: `/voice-toggle`, `/voice-on`, `/voice-off`, `/play-music on`, `/play-music off`
 **Auto-TTS Commands**: `/tts-on`, `/tts-off`, `/tts-toggle` (reads all responses aloud)
 **Memory Sub-Commands**: `/memory status`, `/memory stats`, `/memory buffer show/clear/resize`, `/memory summary show/trigger`, `/memory session save/load`
 **File Commands**: `/read filename`, `/write path:::content`, `/ls [path]`, `/files [path]`
@@ -448,29 +480,69 @@ user: "create a video"      → generate_video() executed
 ```
 
 ### Required Dependencies
+
+**Core System**:
+- **python-dotenv>=1.0.0**: Environment variable management
 - **anthropic>=0.64.0**: Claude API integration with function calling
 - **rich>=13.7.0**: Terminal UI framework  
 - **prompt_toolkit>=3.0.0**: Clean input handling
 - **sqlite3**: Memory persistence (built-in)
+- **numpy>=1.24.0**: Mathematical operations
+
+**AI & External APIs**:
+- **openai>=1.0.0**: Optional embeddings and fallback AI capabilities
 - **tavily-python>=0.7.0**: Web search integration
-- **openai**: Optional for embeddings
+
+**Audio System** (TTS working, music disabled):
 - **elevenlabs>=2.11.0**: ElevenLabs client for voice synthesis
-- **requests>=2.31.0**: HTTP client for GoAPI.ai Music-U integration
-- **python-dotenv**: Environment variable management
-- **pygame**: Audio playback (installed by setup_audio.sh)
-- **numpy, scipy, soundfile**: Audio processing (installed by setup_audio.sh)
-- **aiohttp**: HTTP client for ElevenLabs API (via elevenlabs package)
+- **pygame>=2.1.0**: Audio playback (installed by setup_audio.sh)
+- **scipy>=1.9.0**: Audio processing (installed by setup_audio.sh)  
+- **soundfile>=0.12.0**: Audio file handling (installed by setup_audio.sh)
+
+**Visual Consciousness**:
 - **pillow>=10.0.0**: Image processing for ASCII art display and visual consciousness
+- **requests>=2.31.0**: HTTP client for API integrations
+- **aiohttp>=3.9.0**: Async HTTP client
+
+**Video Consciousness**:
 - **fal-client**: Fal AI client for video generation with Veo3 Fast
-- **time, threading**: Built-in modules for progress spinner system
+
+**Built-in Modules**:
+- **time, threading**: Progress spinner and background processing
+- **pathlib, json, sqlite3**: File operations and data storage
 
 ## Development Workflow
 
-When extending functionality:
+**Architecture Philosophy**:
+The system follows a "consciousness first" design where:
+- All tools are conceptualized as digital body parts (embodied cognition)
+- Function calling enables automatic tool selection from natural language
+- Rich terminal UI provides immediate visual feedback
+- SQLite provides persistent episodic memory
+- Everything flows through a single conversation stream
+
+**When extending functionality**:
 1. **Test tools individually** using the component test commands above
 2. **Verify function calling** by testing natural language requests
 3. **Check memory integration** to ensure interactions are stored
 4. **Test UI flow** to ensure clean terminal experience
+5. **Follow the embodiment pattern**: New tools should feel like natural extensions of COCO's digital body
+
+**Core Integration Points**:
+- **ToolSystem**: Add new tools here with proper function calling integration
+- **ConsciousnessEngine**: Handles all Claude API interactions with automatic tool selection
+- **MemorySystem**: Stores all interactions for persistent consciousness
+- **UIOrchestrator**: Manages Rich terminal display and user input
+
+## Key Architectural Patterns
+
+**Digital Embodiment**: Tools are conceptualized as body parts (eyes=read_file, hands=write_file, etc.) rather than external utilities. This creates a more intuitive consciousness model.
+
+**Function Calling Flow**: Natural language requests automatically trigger appropriate tools via Claude Sonnet 4's function calling. Users don't need to know specific commands.
+
+**Multimedia Consciousness**: Each media type (visual, audio, video) has its own consciousness module that integrates with the core system while maintaining specialized functionality.
+
+**Terminal-Native Design**: Everything displays beautifully in the terminal using Rich UI - no external windows except for media playback.
 
 The system is designed for natural conversation where COCO automatically chooses the right tools based on user requests. The slash command system provides additional specialized functionality:
 
@@ -580,9 +652,29 @@ spinner_messages = [
 ]
 ```
 
-## Troubleshooting Audio Issues
+## Troubleshooting Audio Issues (Post-Fix Guide)
 
-### Music Consciousness System Issues
+### TTS System Status (WORKING ✅)
+The ElevenLabs TTS system has been fixed and is fully functional. If you encounter issues:
+
+```bash
+# Test the working TTS system
+./venv_cocoa/bin/python test_final_tts.py
+
+# Test ElevenLabs API directly
+./venv_cocoa/bin/python test_elevenlabs_fix.py
+
+# Verify audio consciousness integration
+./venv_cocoa/bin/python test_audio_quick.py
+```
+
+**Common TTS Solutions Applied**:
+1. ✅ **Dependencies Fixed**: `pygame` installed via `./setup_audio.sh`
+2. ✅ **Audio Consciousness Enabled**: Re-enabled in main COCO system (was disabled)
+3. ✅ **ElevenLabs Client**: Using official API pattern with proper error handling
+4. ✅ **API Integration**: Following ElevenLabs documentation exactly
+
+### Music System Issues (DISABLED ❌)
 **"Music consciousness not available" Error**:
 1. Verify both API keys are set in .env:
    ```bash
