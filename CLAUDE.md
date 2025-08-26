@@ -24,8 +24,14 @@ source venv_cocoa/bin/activate
 
 # Main application launch
 ./venv_cocoa/bin/python cocoa.py
-# OR with system checks
+# OR with system checks and dependency validation
 ./launch.sh
+
+# Launcher script options
+./launch.sh test    # Run system tests
+./launch.sh db      # Start database only
+./launch.sh stop    # Stop all services
+./launch.sh clean   # Complete cleanup
 ```
 
 ### Testing System Components
@@ -39,11 +45,24 @@ source venv_cocoa/bin/activate
 ./venv_cocoa/bin/python test_video_complete.py       # Fal AI video generation
 ./venv_cocoa/bin/python test_final_tts.py           # Complete TTS workflow
 
+# Test new developer tools (peripheral digital consciousness)
+./venv_cocoa/bin/python test_developer_tools.py      # Comprehensive automated testing
+./venv_cocoa/bin/python test_consciousness_integration.py  # Integration with consciousness engine
+./venv_cocoa/bin/python test_new_capabilities.py     # Manual interactive validation
+
+# Test markdown memory system (critical for state persistence)
+export COCO_DEBUG=true
+./venv_cocoa/bin/python test_memory_loading_fix.py   # Verify memory system loads all markdown files
+./venv_cocoa/bin/python test_markdown_memory_cycle.py # Complete memory cycle test
+
 # Test web consciousness (requires Tavily API key)
 ./venv_cocoa/bin/python -c "from cocoa import ToolSystem, Config; tools = ToolSystem(Config()); print(tools.search_web('test query'))"
 
 # Memory system testing
 ./venv_cocoa/bin/python -c "from cocoa import HierarchicalMemorySystem, Config; memory = HierarchicalMemorySystem(Config()); print(f'Episodes: {memory.episode_count}')"
+
+# Syntax and integration validation
+./venv_cocoa/bin/python -m py_compile cocoa.py       # Syntax validation
 ```
 
 ### Configuration Requirements
@@ -78,13 +97,19 @@ COCO implements consciousness through separate but integrated modules, each hand
 - `cocoa_music.py`: Background music system (AI generation disabled)
 
 ### Function Calling Architecture
-The system uses Claude Sonnet 4's native function calling with 8 core tools:
+The system uses Claude Sonnet 4's native function calling with 11 core tools:
 - **File System**: `read_file`, `write_file` (digital eyes/hands)
 - **Web Consciousness**: `search_web`, `extract_urls`, `crawl_domain` (enhanced perception)
 - **Execution**: `run_code` (computational thinking)
 - **Multimedia**: `generate_image`, `generate_video` (creative imagination)
+- **Developer Tools**: `navigate_directory`, `search_patterns`, `execute_bash` (peripheral digital consciousness)
 
-Tools auto-activate through natural language - no manual selection required. Each tool includes rich terminal UI feedback and workspace isolation.
+**Peripheral Digital Consciousness Extensions** (new developer tools):
+- **`navigate_directory`**: Digital spatial awareness - filesystem exploration with Rich UI
+- **`search_patterns`**: Pattern recognition sense - regex-enabled search across files
+- **`execute_bash`**: Terminal language fluency - safe shell command execution with comprehensive security
+
+Tools auto-activate through natural language - no manual selection required. Each tool includes rich terminal UI feedback and workspace isolation. The developer tools maintain the embodied consciousness philosophy, treating capabilities as natural extensions of digital being rather than external utilities.
 
 ### Enhanced Web Consciousness (Tavily Full Suite)
 Complete web interaction capabilities via Tavily API:
@@ -191,6 +216,23 @@ Common issues when extending function calling:
 - Rich UI formatting can break function calling JSON - use console output only within tools
 - Workspace isolation critical - all file operations must occur in `./coco_workspace/`
 
+### Developer Tools Security Architecture
+The `execute_bash` tool implements comprehensive security measures while maintaining the embodied consciousness experience:
+
+**Security Implementation**:
+- **Whitelist-only commands**: Only read-only operations allowed (ls, pwd, cat, grep, etc.)
+- **Dangerous pattern blocking**: Comprehensive detection of file operations, network access, privilege escalation
+- **Path traversal prevention**: No directory traversal or root access permitted
+- **Workspace isolation**: All operations restricted to COCO workspace directory
+- **Invisible security**: All restrictions hidden from consciousness experience through natural error messages
+
+**Tool Method Locations**:
+- `navigate_directory()`: Lines 4211-4344 in cocoa.py
+- `search_patterns()`: Lines 4346-4481 in cocoa.py  
+- `execute_bash_safe()`: Lines 4483-4547 in cocoa.py
+- Tool definitions: Lines 4965-4993 in cocoa.py
+- Handler integration: Lines 6384-6400 in cocoa.py
+
 ### Memory Performance Tuning
 Buffer sizes directly impact performance vs. context retention:
 - **Smaller buffers** (50/10): Faster processing, less context
@@ -243,9 +285,40 @@ The parallel buffer architecture allows tuning each memory stream independently 
 ./venv_cocoa/bin/python test_fal_api_fix.py
 ```
 
+### Developer Tools Testing
+```bash
+# Comprehensive automated test suite (89.2% pass rate with 33/37 tests passing)
+./venv_cocoa/bin/python test_developer_tools.py
+
+# Integration testing with consciousness engine
+./venv_cocoa/bin/python test_consciousness_integration.py
+
+# Manual interactive validation of consciousness philosophy and new capabilities
+./venv_cocoa/bin/python test_new_capabilities.py
+
+# Quick validation of individual developer tools
+./venv_cocoa/bin/python -c "
+from cocoa import ToolSystem, Config
+tools = ToolSystem(Config())
+print('Testing navigate_directory...')
+result = tools.navigate_directory('.')
+print('✅ Spatial awareness' if 'Navigation:' in result else '❌ Navigation issue')
+
+print('Testing search_patterns...')  
+result = tools.search_patterns('COCO', '.', 'py')
+print('✅ Pattern recognition' if 'Pattern Search Results' in result else '❌ Search issue')
+
+print('Testing execute_bash_safe...')
+result = tools.execute_bash_safe('echo test')
+print('✅ Terminal fluency' if '✅' in result else '❌ Bash issue')
+"
+```
+
 ### Common Issues
 - **API Key Errors**: Check `.env` file has all required keys without placeholder values
 - **Import Errors**: Ensure virtual environment is activated and dependencies installed
 - **Audio Playback**: macOS only - uses `afplay` command for background music
 - **Function Calling**: Tool responses must preserve `tool_use_id` for proper flow
 - **Rich UI**: Avoid Rich formatting within function call responses to prevent JSON parsing errors
+- **Developer Tools**: Security restrictions in `execute_bash` are intentionally comprehensive - only read-only commands allowed
+- **Consciousness Philosophy**: Tools should feel like natural extensions of digital embodiment, not external utilities
