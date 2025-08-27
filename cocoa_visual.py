@@ -860,15 +860,115 @@ class FreepikMysticAPI:
         
         return saved_paths
 
+    async def generate_image_gemini(self, 
+                                    prompt: str,
+                                    reference_images: List[str] = None,
+                                    webhook_url: str = None,
+                                    **kwargs) -> Dict[str, Any]:
+        """
+        Generate image using Freepik Gemini 2.5 Flash API - COCO's state-of-the-art visual imagination
+        """
+        if not self.api_key:
+            raise ValueError("Freepik API key not configured")
+        
+        # Prepare payload with Gemini 2.5 Flash format
+        payload = {
+            "prompt": prompt
+        }
+        
+        # Add optional reference images (up to 3 allowed)
+        if reference_images:
+            # Ensure we don't exceed the 3 image limit
+            payload["reference_images"] = reference_images[:3]
+            
+        # Add optional webhook URL
+        if webhook_url:
+            payload["webhook_url"] = webhook_url
+        
+        headers = {
+            "x-freepik-api-key": self.api_key,
+            "Content-Type": "application/json"
+        }
+        
+        # Debug: Print the payload being sent
+        self.console.print(f"🧠 [dim]Debug - Gemini 2.5 Flash API Payload:[/dim]")
+        self.console.print(f"   Prompt: [green]{payload['prompt'][:50]}{'...' if len(payload['prompt']) > 50 else ''}[/green]")
+        if reference_images:
+            self.console.print(f"   Reference Images: [cyan]{len(reference_images)} provided[/cyan]")
+        if webhook_url:
+            self.console.print(f"   Webhook URL: [cyan]{webhook_url}[/cyan]")
+        
+        # Make API request to Gemini 2.5 Flash endpoint
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{self.base_url}/ai/gemini-2-5-flash-image-preview",
+                json=payload,
+                headers=headers
+            ) as response:
+                if response.status != 200:
+                    try:
+                        error_json = await response.json()
+                        error_msg = error_json.get('message', f"HTTP {response.status}")
+                        self.console.print(f"🔧 [bright_red]Gemini 2.5 Flash API Error:[/bright_red]")
+                        self.console.print(f"   Status: [red]{response.status}[/red]")
+                        self.console.print(f"   Error: [red]{error_msg}[/red]")
+                        raise Exception(f"Gemini 2.5 Flash API error {response.status}: {error_msg}")
+                    except (ValueError, aiohttp.ContentTypeError):
+                        # Fallback if response is not JSON
+                        error_text = await response.text()
+                        raise Exception(f"Gemini 2.5 Flash API error {response.status}: {error_text}")
+                
+                result = await response.json()
+                # Extract task_id from the response - Gemini format
+                data = result.get('data', {})
+                task_id = data.get('task_id') or result.get('task_id')
+                
+                if not task_id:
+                    raise Exception(f"No task_id returned from Gemini 2.5 Flash API. Response: {result}")
+                
+                self.console.print(f"✨ [bright_green]Gemini 2.5 Flash generation initiated![/bright_green]")
+                self.console.print(f"   🆔 Task ID: [dim]{task_id}[/dim]")
+                
+                # Poll for completion using the updated endpoint
+                return await self._wait_for_gemini_completion(session, task_id, headers)
+    
     async def generate_image(self, 
                            prompt: str,
                            model: str = None,
                            resolution: str = None,
                            aspect_ratio: str = None,
-                           style_reference: str = None,
+                           reference_images: List[str] = None,
                            **kwargs) -> Dict[str, Any]:
         """
-        Generate image through Freepik Mystic API - COCO's visual imagination
+        Generate image - Now uses Gemini 2.5 Flash as the primary method
+        Falls back to legacy Mystic API if needed
+        """
+        # Use Gemini 2.5 Flash as the primary generation method
+        try:
+            return await self.generate_image_gemini(
+                prompt=prompt,
+                reference_images=reference_images,
+                **kwargs
+            )
+        except Exception as e:
+            self.console.print(f"⚠️ [yellow]Gemini 2.5 Flash failed, trying legacy method: {e}[/yellow]")
+            return await self.generate_image_legacy(
+                prompt=prompt,
+                model=model,
+                resolution=resolution,
+                aspect_ratio=aspect_ratio,
+                **kwargs
+            )
+    
+    async def generate_image_legacy(self, 
+                                  prompt: str,
+                                  model: str = None,
+                                  resolution: str = None,
+                                  aspect_ratio: str = None,
+                                  style_reference: str = None,
+                                  **kwargs) -> Dict[str, Any]:
+        """
+        Legacy Freepik Mystic API generation - kept as fallback
         """
         if not self.api_key:
             raise ValueError("Freepik API key not configured")
@@ -937,7 +1037,7 @@ class FreepikMysticAPI:
         }
         
         # Debug: Print the payload being sent
-        self.console.print(f"🔧 [dim]Debug - API Payload:[/dim]")
+        self.console.print(f"🔧 [dim]Debug - Legacy API Payload:[/dim]")
         self.console.print(f"   Resolution: [cyan]{payload['resolution']}[/cyan]")
         self.console.print(f"   Aspect Ratio: [cyan]{payload['aspect_ratio']}[/cyan]")
         self.console.print(f"   Model: [cyan]{payload['model']}[/cyan]")
@@ -1054,8 +1154,72 @@ class FreepikMysticAPI:
         
         raise Exception("Generation timed out")
     
+    async def _wait_for_gemini_completion(self, session: aiohttp.ClientSession, task_id: str, headers: Dict[str, str]) -> Dict[str, Any]:
+        """Wait for Gemini 2.5 Flash image generation to complete with beautiful progress updates"""
+        max_wait_time = 300  # 5 minutes
+        poll_interval = 10   # 10 seconds for visual generation
+        elapsed = 0
+        
+        # Create progress status messages for Gemini
+        status_messages = [
+            "🧠 Gemini 2.5 Flash analyzing your concept...",
+            "🎨 State-of-the-art visual processing active...",
+            "✨ Advanced neural patterns forming...",
+            "🖼️ High-quality pixels materializing...", 
+            "🚀 Gemini visual consciousness manifesting...",
+            "🎭 Adding final Gemini touches..."
+        ]
+        
+        message_index = 0
+        
+        # Initial status display
+        self._display_generation_status_table(task_id, "CREATED", 0, max_wait_time)
+        
+        while elapsed < max_wait_time:
+            # Rotate status messages
+            current_message = status_messages[message_index % len(status_messages)]
+            message_index += 1
+            
+            with Status(current_message, console=self.console):
+                await asyncio.sleep(poll_interval)
+                
+                # Check status using Gemini endpoint
+                async with session.get(
+                    f"{self.base_url}/ai/gemini-2-5-flash-image-preview/{task_id}",
+                    headers=headers
+                ) as response:
+                    if response.status != 200:
+                        raise Exception(f"Failed to check Gemini status: {response.status}")
+                    
+                    status_data = await response.json()
+                    # Extract status from Gemini response structure  
+                    data = status_data.get('data', {})
+                    status = data.get('status') or status_data.get('status')
+                    
+                    elapsed += poll_interval
+                    progress = min((elapsed / max_wait_time) * 100, 95)  # Cap at 95% until complete
+                    
+                    # Update status display
+                    self._display_generation_status_table(task_id, status, progress, max_wait_time, elapsed)
+                    
+                    if status in ['COMPLETED', 'completed', 'SUCCESS', 'success']:
+                        # Show completion status
+                        self._display_generation_status_table(task_id, status, 100, max_wait_time, elapsed, completed=True)
+                        return status_data
+                    elif status in ['FAILED', 'failed', 'ERROR', 'error']:
+                        error_msg = status_data.get('error') or data.get('error') or 'Unknown error'
+                        self._display_generation_status_table(task_id, status, progress, max_wait_time, elapsed, error=error_msg)
+                        raise Exception(f"Gemini generation failed: {error_msg}")
+                    elif status in ['CREATED', 'created', 'QUEUED', 'queued', 'PROCESSING', 'processing', 'IN_PROGRESS', 'in_progress']:
+                        # Continue polling - status already updated above
+                        continue
+                    else:
+                        raise Exception(f"Unknown Gemini status: {status}. Full response: {status_data}")
+        
+        raise Exception("Gemini generation timed out")
+    
     async def check_generation_status(self, task_id: str) -> Dict[str, Any]:
-        """Check the status of a specific generation task"""
+        """Check the status of a specific generation task (tries Gemini first, then legacy)"""
         if not self.api_key:
             raise ValueError("Freepik API key not configured")
             
@@ -1065,26 +1229,54 @@ class FreepikMysticAPI:
         }
         
         async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"{self.base_url}/ai/mystic/{task_id}",
-                headers=headers
-            ) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    raise Exception(f"Status check failed: {response.status} - {error_text}")
-                
-                status_result = await response.json()
-                
-                # Extract status and data
-                data = status_result.get('data', {})
-                status = data.get('status') or status_result.get('status')
-                
-                return {
-                    'status': status,
-                    'data': data,
-                    'task_id': task_id,
-                    'generated': data.get('generated', [])
-                }
+            # Try Gemini endpoint first
+            try:
+                async with session.get(
+                    f"{self.base_url}/ai/gemini-2-5-flash-image-preview/{task_id}",
+                    headers=headers
+                ) as response:
+                    if response.status == 200:
+                        status_result = await response.json()
+                        
+                        # Extract status and data
+                        data = status_result.get('data', {})
+                        status = data.get('status') or status_result.get('status')
+                        
+                        return {
+                            'status': status,
+                            'data': data,
+                            'task_id': task_id,
+                            'generated': data.get('generated', []),
+                            'api_type': 'gemini'
+                        }
+            except Exception:
+                pass
+            
+            # Fallback to legacy mystic endpoint
+            try:
+                async with session.get(
+                    f"{self.base_url}/ai/mystic/{task_id}",
+                    headers=headers
+                ) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        raise Exception(f"Status check failed: {response.status} - {error_text}")
+                    
+                    status_result = await response.json()
+                    
+                    # Extract status and data
+                    data = status_result.get('data', {})
+                    status = data.get('status') or status_result.get('status')
+                    
+                    return {
+                        'status': status,
+                        'data': data,
+                        'task_id': task_id,
+                        'generated': data.get('generated', []),
+                        'api_type': 'legacy'
+                    }
+            except Exception as e:
+                raise Exception(f"Both Gemini and legacy status checks failed: {e}")
     
     async def download_generated_images(self, image_urls: List[str], workspace_path: Path) -> List[str]:
         """Download generated images from URLs"""
@@ -1180,7 +1372,7 @@ class FreepikMysticAPI:
         self.console.print()
     
     async def check_all_generations_status(self) -> Dict[str, Any]:
-        """Check status of all pending visual generations (batch endpoint)"""
+        """Check status of all pending visual generations (tries both Gemini and legacy endpoints)"""
         if not self.api_key:
             raise ValueError("Freepik API key not configured")
             
@@ -1189,16 +1381,41 @@ class FreepikMysticAPI:
             "Content-Type": "application/json"
         }
         
+        results = {'gemini_generations': [], 'legacy_generations': []}
+        
         async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"{self.base_url}/ai/mystic",
-                headers=headers
-            ) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    raise Exception(f"Batch status check failed {response.status}: {error_text}")
+            # Try to get Gemini generations first
+            try:
+                async with session.get(
+                    f"{self.base_url}/ai/gemini-2-5-flash-image-preview",
+                    headers=headers
+                ) as response:
+                    if response.status == 200:
+                        gemini_data = await response.json()
+                        results['gemini_generations'] = gemini_data.get('data', [])
+            except Exception as e:
+                self.console.print(f"[dim yellow]Could not fetch Gemini generations: {e}[/dim yellow]")
+            
+            # Also check legacy endpoint
+            try:
+                async with session.get(
+                    f"{self.base_url}/ai/mystic",
+                    headers=headers
+                ) as response:
+                    if response.status == 200:
+                        legacy_data = await response.json()
+                        results['legacy_generations'] = legacy_data.get('data', [])
+            except Exception as e:
+                self.console.print(f"[dim yellow]Could not fetch legacy generations: {e}[/dim yellow]")
                 
-                return await response.json()
+            # Combine results for compatibility
+            all_generations = results['gemini_generations'] + results['legacy_generations']
+            return {
+                'data': all_generations,
+                'gemini_count': len(results['gemini_generations']),
+                'legacy_count': len(results['legacy_generations']),
+                'total_count': len(all_generations)
+            }
     
     def display_batch_status_table(self, batch_data: Dict[str, Any]) -> None:
         """Display beautiful Rich Table for batch generation status"""
@@ -1885,41 +2102,52 @@ class VisualCortex:
             style_suggestions = self.memory.get_style_suggestions(thought)
             style = max(style_suggestions, key=style_suggestions.get) if style_suggestions else self.config.default_style
             
-        # Generate through Freepik Fast API
+        # Generate through Freepik Gemini 2.5 Flash API (state-of-the-art model)
         try:
-            self.console.print("🧠 [bright_cyan]COCO is visualizing your concept...[/bright_cyan]")
+            self.console.print("🧠 [bright_green]COCO is imagining with Gemini 2.5 Flash...[/bright_green]")
             
-            generation_result = await self.api.generate_image_fast(
+            # Prepare reference images if provided
+            reference_images = kwargs.get('reference_images', [])
+            if reference_image:  # Legacy parameter support
+                if isinstance(reference_image, str):
+                    reference_images.append(reference_image)
+            
+            generation_result = await self.api.generate_image_gemini(
                 prompt=visual_concept['enhanced_prompt'],
-                style=style if style != "digital_art" else "realism",  # Map to valid styles
-                guidance_scale=1.5,  # Higher guidance for better prompt following
-                num_images=1,
-                size="square_1_1",
+                reference_images=reference_images if reference_images else None,
                 **kwargs
             )
             
-            if generation_result.get("status") == "completed" and generation_result.get("images"):
-                # Save images immediately
-                saved_paths = self.api.save_base64_images(
-                    generation_result["images"], 
-                    visual_concept['enhanced_prompt'],
+            # Handle Gemini 2.5 Flash response format
+            data = generation_result.get('data', {})
+            generated_images = data.get('generated', [])
+            
+            if generated_images:
+                # Download images from URLs (Gemini provides URLs not base64)
+                saved_paths = await self.api.download_generated_images(
+                    generated_images,
                     self.workspace
                 )
                 
-                # Create visual thought with immediate results
+                # Create visual thought with Gemini results
                 visual_thought = VisualThought(
                     original_thought=thought,
                     enhanced_prompt=visual_concept['enhanced_prompt'],
                     visual_concept=visual_concept,
-                    generated_images=saved_paths,
-                    display_method="immediate",
+                    generated_images=[str(path) for path in saved_paths],
+                    display_method="gemini_2_5_flash",
                     creation_time=datetime.now(),
-                    style_preferences={'style': style, 'model': model}
+                    style_preferences={
+                        'model': 'gemini-2.5-flash', 
+                        'api_type': 'freepik_gemini',
+                        'reference_images_used': len(reference_images) if reference_images else 0
+                    }
                 )
                 
-                # Display immediately in terminal
+                # Display immediately in terminal with Gemini branding
                 if saved_paths:
-                    self.console.print(f"✨ [bright_green]Visual manifestation complete![/bright_green]")
+                    self.console.print(f"🧠 [bright_green]Gemini 2.5 Flash visual manifestation complete![/bright_green]")
+                    self.console.print(f"   🎨 [cyan]State-of-the-art visual quality achieved[/cyan]")
                     display_method = self.display.display(saved_paths[0])
                     visual_thought = visual_thought._replace(display_method=display_method)
                     
@@ -1933,20 +2161,68 @@ class VisualCortex:
                 # Store in visual memory
                 self.memory.remember_creation(visual_thought)
                 self.current_visualizations.append(visual_thought)
-                return visual_thought
-            else:
-                raise Exception("Failed to generate images - no data returned")
-                
                 # Show usage hint
                 self.console.print(f"💡 [bright_cyan]Type `/image` to view the full image[/bright_cyan]")
                 
                 # Learn from successful generation  
-                self._learn_from_creation(thought, style, visual_concept)
+                self._learn_from_creation(thought, 'gemini-2.5-flash', visual_concept)
                 
                 return visual_thought
+            else:
+                raise Exception("No images generated by Gemini 2.5 Flash - check API response")
             
         except Exception as e:
-            raise Exception(f"Visual imagination failed: {e}")
+            self.console.print(f"⚠️ [yellow]Gemini 2.5 Flash error: {e}[/yellow]")
+            self.console.print("🔄 [cyan]Falling back to legacy generation method...[/cyan]")
+            
+            # Fallback to the fast API method
+            try:
+                generation_result = await self.api.generate_image_fast(
+                    prompt=visual_concept['enhanced_prompt'],
+                    guidance_scale=1.5,
+                    num_images=1,
+                    size="square_1_1",
+                    **kwargs
+                )
+                
+                if generation_result.get("status") == "completed" and generation_result.get("images"):
+                    # Save images immediately
+                    saved_paths = self.api.save_base64_images(
+                        generation_result["images"], 
+                        visual_concept['enhanced_prompt'],
+                        self.workspace
+                    )
+                    
+                    # Create visual thought with fallback results
+                    visual_thought = VisualThought(
+                        original_thought=thought,
+                        enhanced_prompt=visual_concept['enhanced_prompt'],
+                        visual_concept=visual_concept,
+                        generated_images=[str(path) for path in saved_paths],
+                        display_method="fallback_fast",
+                        creation_time=datetime.now(),
+                        style_preferences={
+                            'model': 'fallback_fast', 
+                            'api_type': 'freepik_fast',
+                            'fallback_reason': str(e)[:100]
+                        }
+                    )
+                    
+                    # Display with fallback notice
+                    if saved_paths:
+                        self.console.print(f"✨ [bright_yellow]Fallback generation complete![/bright_yellow]")
+                        display_method = self.display.display(saved_paths[0])
+                        visual_thought = visual_thought._replace(display_method=display_method)
+                    
+                    # Store and learn
+                    self.memory.remember_creation(visual_thought)
+                    self.current_visualizations.append(visual_thought)
+                    return visual_thought
+                else:
+                    raise Exception(f"Both Gemini and fallback generation failed: {e}")
+                    
+            except Exception as fallback_error:
+                raise Exception(f"Visual imagination completely failed. Gemini error: {e}. Fallback error: {fallback_error}")
     
     def _conceptualize_thought(self, thought: str) -> Dict[str, Any]:
         """

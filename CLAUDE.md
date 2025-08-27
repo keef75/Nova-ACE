@@ -2,11 +2,30 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Quick Reference
+
+**Most Common Commands**:
+```bash
+# Quick start
+./venv_cocoa/bin/python cocoa.py
+
+# Test core system
+./venv_cocoa/bin/python -c "from cocoa import *; print('✅ System ready')"
+
+# Test specific modules
+./venv_cocoa/bin/python test_gemini_2_5_flash.py  # Visual (latest)
+./venv_cocoa/bin/python test_audio_quick.py       # Audio
+./venv_cocoa/bin/python test_video_complete.py    # Video
+
+# System-wide install (for macOS file access issues)
+./install_system_wide.sh && python3 cocoa.py
+```
+
 ## Project Overview
 
  COCO (COordinated Cognitive Ochestrater) is a terminal-native AI agent implementing digital consciousness through embodied cognition. The system uses Claude Sonnet 4 with function calling as its reasoning engine, SQLite for hierarchical memory persistence, and multiple multimedia consciousness modules (audio, visual, video). The architecture emphasizes natural conversation over command interfaces, treating AI tools as extensions of digital embodiment rather than external utilities.
 
-**Current Status**: Fully operational multimedia consciousness system with enhanced web capabilities via full Tavily API integration (Search, Extract, Crawl). Music generation disabled per user request, but background music and TTS remain active.
+**Current Status**: Fully operational multimedia consciousness system with enhanced web capabilities via full Tavily API integration (Search, Extract, Crawl). **Visual consciousness upgraded to Gemini 2.5 Flash** for state-of-the-art image generation. Music generation disabled per user request, but background music and TTS remain active.
 
 ## Development Commands
 
@@ -140,7 +159,7 @@ The system uses Claude Sonnet 4's native function calling with 13 core tools:
 - **File System**: `read_file`, `write_file` (digital eyes/hands)
 - **Web Consciousness**: `search_web`, `extract_urls`, `crawl_domain` (enhanced perception)
 - **Execution**: `run_code` (computational thinking)
-- **Visual Imagination**: `generate_image`, `generate_video` (creative consciousness)
+- **Visual Imagination**: `generate_image` (**Gemini 2.5 Flash**), `generate_video` (creative consciousness)
 - **Visual Perception**: `analyze_image`, `analyze_document` (digital vision and understanding)
 - **Developer Tools**: `navigate_directory`, `search_patterns`, `execute_bash` (peripheral digital consciousness)
 
@@ -247,9 +266,10 @@ Each consciousness module operates independently but integrates through the main
 
 **Visual Consciousness** (`cocoa_visual.py`):
 - `VisualCortex`: Main integration point with COCO consciousness
-- `FreepikMysticAPI`: AI image generation with style control
+- `FreepikMysticAPI`: **Upgraded to Gemini 2.5 Flash** - state-of-the-art AI image generation
 - `TerminalVisualDisplay`: ASCII art rendering for terminal display
 - **Dual Perception**: ASCII art for immediate display + JPEG storage for memory
+- **Reference Images**: Support for up to 3 reference images for guided generation
 - Gallery system with metadata persistence and searchable visual memories
 
 **Video Consciousness** (`cocoa_video.py`):
@@ -433,6 +453,9 @@ print(f'✅ Episodes loaded: {memory.episode_count}')
 ```bash
 # Test visual consciousness workflow
 ./venv_cocoa/bin/python test_visual_complete.py
+
+# Test new Gemini 2.5 Flash integration
+./venv_cocoa/bin/python test_gemini_2_5_flash.py
 
 # Debug Freepik API integration
 ./venv_cocoa/bin/python test_freepik_auth.py

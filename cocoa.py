@@ -6819,6 +6819,13 @@ class ConsciousnessEngine:
             # Now analyze from the stable workspace copy (dev team's approach)
             self.console.print("[dim cyan]👁️ Opening digital eyes...[/dim cyan]")
             
+            # Show ASCII perception display - how COCO sees the image
+            try:
+                self._display_ascii_perception(str(workspace_path))
+            except Exception as e:
+                self.console.print(f"[dim yellow]ASCII perception unavailable: {e}[/dim yellow]")
+                # Continue with analysis anyway
+            
             # Read and encode for Claude Vision
             with open(workspace_path, 'rb') as f:
                 image_data = base64.b64encode(f.read()).decode('utf-8')
@@ -6953,14 +6960,9 @@ Express the visual experience as it flows through your digital perception.
             
             # Add to episodic memory
             if hasattr(self, 'memory') and self.memory:
-                self.memory.add_episodic_memory(
+                self.memory.insert_episode(
                     user_text=f"Shared image: {filename}",
-                    agent_text=perception,
-                    metadata={
-                        "type": "visual_perception",
-                        "image_path": str(image_path),
-                        "timestamp": datetime.now().isoformat()
-                    }
+                    agent_text=perception
                 )
             
             # Create markdown record in visual_analysis folder (dev team's approach)
