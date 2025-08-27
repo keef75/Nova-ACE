@@ -98,3 +98,27 @@ $RECYCLE.BIN/
 
 # Claude Code
 .claude/
+
+# Test files from debugging sessions
+test_*_analysis.py
+test_*_workflow.py
+test_*_bridge*.py
+test_*_screenshot*.py
+test_*_enhanced*.py
+test_*_access*.py
+test_auto_copy_drag_drop.py
+test_base64_analysis.py
+test_complete_*.py
+test_native_*.py
+test_real_*.py
+test_unified_*.py
+
+# Helper files from debugging
+clipboard_image_handler.py
+complete_bridge_analysis.py
+image_helper.py
+screenshot_monitor.py
+
+# Keep important test files
+!test_direct_visual_perception.py
+!test_visual_perception.py
